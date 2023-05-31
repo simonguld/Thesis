@@ -1,0 +1,26 @@
+
+# model and initial configuration
+model    = nematic
+nsteps   = 1000
+ninfo    = 100
+LX       = 100
+LY       = 100
+bc	 = 0
+
+# model parameters...
+Gamma    = 0.1
+xi 	 = 0.1
+tau      = 2
+
+rho      = 40
+friction = 0.0
+CC	 = 0.10
+LL       = 0.01
+zeta     = 0.05
+backflow_on = true
+
+# initial configuration options...
+angle    = 0
+noise    = 0
+n_preinit= 0
+npc	 = 0
