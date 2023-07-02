@@ -39,13 +39,13 @@ np.set_printoptions(precision = 5, suppress=1e-10)
 
 
 # if development_mode, use only few frames
-development_mode = True
+development_mode = False
 if development_mode:
     num_frames = 12
 
 
 # decide whether to run locally or on cluster
-run_locally = True
+run_locally = False
 if run_locally:
     folder_path = 'X:\\nematic_data'
     output_path = 'X:\\output_local'
@@ -206,29 +206,6 @@ def get_density_fluctuations(top_defect_list, LX, LY, Nwindows, Ndof = 1):
     density_fluctuations = np.var(defect_densities, axis=0, ddof = Ndof)
     return density_fluctuations, window_sizes
 
-def est_stationarity(time_series, interval_len, Njump, Nconverged, max_sigma_dist = 2):
- 
-    # Estimate the stationarity of a time series by calculating the mean and standard deviation
-    # of the time series in intervals of length interval_len. If the mean of a block is sufficiently
-    # close to the mean of the entire time series, then the block is considered stationary.
-
-    Nframes = len(time_series)
-    Nblocks = int(Nframes / interval_len)
-    converged_mean = np.mean(time_series[Nconverged:])
-    global_std = np.std(time_series[Nconverged:], ddof = 1)
-
-    it = 0
-    while it * Njump < Nframes - interval_len:
-        mean_block = np.mean(time_series[it * Njump: it * Njump + interval_len])
-        dist_from_mean = np.abs(mean_block - converged_mean) / global_std
-
-        print("For block: ", it, "  the distance from the converged mean is: ", dist_from_mean, ".")
-        if np.abs(mean_block - converged_mean) > max_sigma_dist * global_std:
-            it += 1
-        else:
-            return it * Njump
-    return it * Njump
-
 def animate(oa, fn, rng=[], inter=200, show=True):
     """Show a frame-by-frame animation.
 
@@ -272,12 +249,8 @@ def animate(oa, fn, rng=[], inter=200, show=True):
 # make idx_first_frame a dyn. variable
 
 def main():
-    save_density_plots, save_model_params, check_if_params_are_identical = True, True, False
-    calc_density_fluctuations = True
-
-    if save_model_params:
-        # Set what params to discard
-        params_discard_list = ['Ex','Ey','_path','_compress_full','_compress','_ext']
+    save_density_plots,= True,
+ 
 
     # Get list of folders
     dirs = os.listdir(folder_path)
@@ -286,24 +259,12 @@ def main():
     # top. defects (activity = 0.022) are discarded)
     zeta_c = 0.022
 
-    Nexperiment = 10
-    # Decide which experiment to analyze [from 0 to 9]
-    experiment_list = [0,1]
-    # Decide how many windows to use for calculating defect density fluctuations
-    Nwindows = 5
+    Nexperiment = 0
 
-
-    # After having looked at the no. of top. defects for each activity, the following cutoffs indicate when the
-    # no. of top. defects have converged. To generalize this approach, one could use a statistical test to 
-    # check for stationarity in the time series, and then increase the cutoff until convergence occurs.
-    # 2 such tests are Augmented Dickey-Fuller (ADF) test and Kwiatkowski-Phillips-Schmidt-Shin (KPSS) Test
-    truncated_samples_activities = [0.024, 0.025, 0.026, 0.028, 0.030, 0.032]
-    truncated_samples_cutoff = [100, 85, 80, 25, 25, 25]
 
     # Find folders with activities below the cutoff
     keep_list = []
     pop_idx_list = []
-    act_list = []
 
     if not run_locally:
         for i, dir in enumerate(dirs):
@@ -331,9 +292,8 @@ def main():
     
 
     # Initialize arrays to hold results
-    statistics_arr = np.zeros((Nfolders, 2))
     activity_arr = np.zeros((Nfolders, 1))
-    fluctuation_arr = np.zeros((Nfolders, Nwindows))
+    
 
     # Get top. defects for each folder
     for i, dir in enumerate(dirs):
@@ -343,127 +303,37 @@ def main():
         ar = mp.archive.loadarchive(archive_path)
         LX, LY = ar.__dict__['LX'], ar.__dict__['LY']
         activity_arr[i] = ar.__dict__['zeta']
-
-        # Initialize defect density arr
+        Nframes = ar.__dict__['num_frames']
+        idx_first_frame = 0
         if i == 0:
-            if not development_mode:
-                Nframes = ar.__dict__['num_frames']
-            else:
-                Nframes = num_frames
-            def_density_arr = np.zeros((Nfolders, Nframes))
-        print("act Nframes def_dens_Arr shape", activity_arr[i], Nframes, def_density_arr.shape)
-
-        # Determine when to truncate samples
-        if activity_arr[i] in truncated_samples_activities:
-            idx_first_frame = truncated_samples_cutoff[truncated_samples_activities.index(activity_arr[i])]
-        else:
-            idx_first_frame = 0
-
-        if save_model_params:
-            if i == 0:
-                model_params = ar.__dict__.copy()
-                for key in params_discard_list:
-                    model_params.pop(key)
-                for key in model_params:
-                    model_params[key] = [model_params[key]]
-            else:
-                if check_if_params_are_identical:
-                    for key in model_params:
-                        model_params[key].append(ar.__dict__[key])
-    
+            def_density_arr = np.zeros([Nfolders, Nframes])
+     
         # Get defect list
         top_defects = get_defect_list(ar, LX, LY, idx_first_frame=idx_first_frame)
-    
         # Get total defect density
         dens_defects = get_defect_density(top_defects, LX*LY)
-        print("dens_defects", dens_defects)
-
-        statistics_arr[i] = np.mean(dens_defects), np.std(dens_defects, ddof = 1)
-
-        if calc_density_fluctuations:
-            # Get defect density fluctuations
-            fluctuation_arr[i], window_sizes = get_density_fluctuations(top_defects, LX, LY, Nwindows, Ndof=1)
-
-
-            # Save defect densities
-            def_density_arr[i][idx_first_frame:] = dens_defects
-
-            # Plot density fluctuations against windows sizes for given activity
-            fig, ax = plt.subplots()
-            ax.plot(window_sizes, fluctuation_arr[i], '.-', label = f'Density fluctuations for activity = {float(activity_arr[i])}:.2f')
-            ax.set_xlabel('Window size')
-            ax.set_ylabel('Density fluctuations')
-            ax.set_title('Density fluctuations vs. window size for activity = {}'.format(activity_arr[i]))
-            ax.legend()
-            plt.savefig(f'{output_path}{bracket}density_fluctuations_{activity_arr[i]}.png')
-            plt.close() 
-
+        # Save defect densities
+        def_density_arr[i][idx_first_frame:] = dens_defects
 
         if save_density_plots:
-            # Plot defect densities
-            fig, ax = plt.subplots()
-            Nframes = len(dens_defects)
-            ax.plot(np.arange(idx_first_frame,dens_defects,1), dens_defects, '.-', label = 'Total defects')
-            ax.set_xlabel('Frame')
-            ax.set_ylabel('Defect density')
-            ax.set_title('Defect density vs. frame for activity = {}'.format(activity_arr[i]))
-            ax.legend()
-    
-            plt.savefig(f'{output_path}{bracket}defect_density_{activity_arr[i]}.png')
-            plt.close()
+                # Plot defect densities
+                fig, ax = plt.subplots()
+                Nframes = len(dens_defects)
+                ax.plot(np.arange(idx_first_frame,len(dens_defects),1), dens_defects, '.-', label = 'Total defects')
+                ax.set_xlabel('Frame')
+                ax.set_ylabel('Defect density')
+                ax.set_title('Defect density vs. frame for activity = {}'.format(activity_arr[i]))
+                ax.legend()
+        
+                plt.savefig(f'{output_path}{bracket}defect_density_{activity_arr[i]}.png')
+                plt.close()
 
 
     # Save results
     np.savetxt(f'{output_path}{bracket}defect_densities.txt', def_density_arr)
-    np.savetxt(f'{output_path}{bracket}av_defect_densities.txt', statistics_arr)
-    np.savetxt(f'{output_path}{bracket}activity.txt', activity_arr)
-    np.savetxt(f'{output_path}{bracket}fluctuations.txt', fluctuation_arr)
-    if save_model_params:
-        model_params = pd.DataFrame.from_dict(model_params) 
-        model_params.to_csv(f'{output_path}{bracket}model_params.csv')
-        if check_if_params_are_identical:
-            stds = model_params.describe().loc['std']
-            print("No. of parameters varied between simulations: ", len(stds > 1e-5))
-
-
-    # Plot average defect density
-    fig, ax = plt.subplots()
-    ax.errorbar(activity_arr, statistics_arr[:, 0], yerr = statistics_arr[:, 1], \
-                fmt = 'k.', elinewidth=1.5, capsize=1.5, capthick=1, markersize = 4)
-    ax.set_xlabel('Activity')   
-    ax.set_ylabel('Defect density')
-    ax.set_title('Average defect density vs. activity')
-    plt.savefig(f'{output_path}{bracket}av_defect_density.png')
-    plt.close()
-
+ 
 if __name__ == '__main__':
     main()
 
 
 
-## SCRAP --------------------------------------------------------------------------------------
-
-
-   # Calc vorticity etc
-    """
-    Qxx_dat = frame.QQxx.reshape(LX, LY)
-    Qyx_dat = frame.QQyx.reshape(LX, LY)
-
-    # get directors
-    dx, dy, S = get_dir(Qxx_dat, Qyx_dat, return_S=True)
-    vx, vy = mp.base_modules.flow.velocity(frame.ff, LX, LY)
-
-    dyux, dxux = np.gradient(vx)
-    dyuy, dxuy = np.gradient(vy)
-
-    vort = dxuy-dyux
-    E = dxux + dyuy
-    R = E**2 - vort**2
-    """
-
-    # Get no. of positive defects
-    #nposdef = len([d for d in defects if d['charge']==0.5])
-    #print(nposdef)  
-
-    #anim = animate(ar, plot_defects, rng=[1,20], inter = 400, show = True)
-    #anim.resume()
