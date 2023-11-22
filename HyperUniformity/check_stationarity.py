@@ -99,24 +99,6 @@ def main():
 
     
     for i in range(Nfolders):
-        if 0:
-            print("\nFor activity = ", act_list[i], ":")
-            p_val = 1
-            it = 0
-            idx_first_frame = 0
-            if act_list[i] <= 0.032:
-                while p_val > 0.02:
-                    if Nframes_adf + it * Njump_adf < Nframes:
-                        print("For first frame: ", it * Njump_adf)
-                        results = do_adf_test(density_arr[i,it * Njump_adf: it * Njump_adf + Nframes_adf], autolag = 'AIC', regression = 'c', verbose = True)
-                        p_val = results[1]
-                        idx_first_frame = it * Njump_adf
-                        it += 1      
-                    else:
-                        idx_first_frame = Nframes - 1
-                        print("No stationary region found for activity = ", act_list[i])
-                        break
-
         print("\nFor activity = ", act_list[i], ":")
         idx_first_frame = est_stationarity(density_arr[i], 10, 25, 100, max_sigma_dist=2)
         fig, ax = plt.subplots()

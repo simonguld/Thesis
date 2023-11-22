@@ -4,8 +4,10 @@
 ### SETUP ------------------------------------------------------------------------------------
 
 ## Imports:
-import os, sys
-import pickle, glob
+import os
+import sys
+import pickle
+import glob
 import numpy as np
 import seaborn as sns
 import pandas as pd
@@ -263,6 +265,61 @@ def animate(oa, fn, rng=[], inter=200, show=True):
       return
 
     return anim
+
+
+def sigma_calculator_2d(field, R, N, center_x, center_y):
+    field = np.array(field)  # Convert field to a NumPy array
+    indexes = np.random.choice(range(len(field)), N, replace=False)
+    points = field
+    densities = []
+    counts = []
+
+    for i in range(N):
+        point0 = points[indexes[i]]
+        distance = np.linalg.norm(points - point0, axis=1)
+        n = np.sum(distance <= R)
+        density = n / (np.pi * R**2)  # Area of the circle
+        counts.append(n)
+        densities.append(density)
+
+    densities = np.array(densities)
+    counts = np.array(counts)
+
+    delta_rho_squared_counts = np.var(counts)/(np.pi * R**2)
+    delta_rho_squared_densities = np.var(densities)
+
+    normalized_delta_rho_squared_density = delta_rho_squared_densities
+
+    return delta_rho_squared_counts, normalized_delta_rho_squared_density,densities
+
+def HyperUniformity_2d(field,R):
+    Sigma1 = []
+    Sigma2 = []
+    N=len(R)
+    for i in range(N):
+          
+        # Calculate the center of the circle
+        center_x = 0  # X-coordinate of the center
+        center_y = 0  # Y-coordinate of the center
+
+        # Calculate sigma using sigma_calculator_2d with the defined circle properties
+        sig1, sig2, density= sigma_calculator_2d(field, R[i], len(field), center_x, center_y)
+
+        Sigma1.append(sig1)
+        Sigma2.append(sig2)
+        
+        
+        if i==0:
+            density0=np.mean(density)
+            
+    return Sigma1, Sigma2, R,density0
+
+def Hyper(field,R):
+    sigma1,sigma2,R, density0=HyperUniformity_2d(field,R)
+    ## sigma 1 is  calculated using number of particles, not what we want feel free to take it out
+    Sigma2=sigma2/(density0**2) ## calculated using density, it´s the one you want 
+    
+    return Sigma2, R
 
 ### MAIN ---------------------------------------------------------------------------------------
 

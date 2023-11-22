@@ -170,6 +170,7 @@ def get_density_fluctuations(top_defect_list, LX, LY, Nwindows, Ndof = 1):
     Ndof: int, number of degrees of freedom used to calculate variance (default: 1)
     Returns:
     --------
+    
     defect_densities: array of defect densities for different window sizes
 
     """
@@ -182,7 +183,7 @@ def get_density_fluctuations(top_defect_list, LX, LY, Nwindows, Ndof = 1):
     center = np.array([LX/2, LY/2])
     # Define max. and min. window size
     max_window_size = LX / 2 - 1
-    min_window_size = LX / Nwindows
+    min_window_size = (LX / 2) / Nwindows
     # Define window sizes
     window_sizes = np.linspace(min_window_size, max_window_size, Nwindows)
 
@@ -203,6 +204,7 @@ def get_density_fluctuations(top_defect_list, LX, LY, Nwindows, Ndof = 1):
     # Calculate fluctuations of defect density
     density_fluctuations = np.var(defect_densities, axis=0, ddof = Ndof)
     return density_fluctuations, window_sizes
+
 
 def est_stationarity(time_series, interval_len, Njump, Nconverged, max_sigma_dist = 2):
  
@@ -226,7 +228,7 @@ def est_stationarity(time_series, interval_len, Njump, Nconverged, max_sigma_dis
             return it * Njump, True
     return it * Njump, False
 
-def save_density_plot(dens_defects, activity, idx_first_frame,):
+def save_density_plot(dens_defects, activity, idx_first_frame,exp):
         """
         plot options are defect_density, fluctuations, av_defect_density
         """
@@ -238,7 +240,7 @@ def save_density_plot(dens_defects, activity, idx_first_frame,):
         ax.set_xlabel('Frame')
         ax.set_ylabel('Defect density')
         ax.set_title('Defect density for activity = {}'.format(activity))
-        plt.savefig(f'{output_path}{bracket}defect_density_{activity}.png')
+        plt.savefig(f'{output_path}{bracket}defect_density{exp}_{activity}.png')
         plt.close()
 
 def save_fluctuation_plot(fluctuations, activity, window_sizes):
@@ -289,6 +291,16 @@ def save_av_defect_density_plot(statistics_arr, activity_list):
     plt.savefig(f'{output_path}{bracket}av_defect_density.png')
     plt.close()
 
+def gen_debug_txt(message = '', no = 0):
+    """
+    Generate txt file with message and no.
+    """
+    with open(f'{output_path}{bracket}debug{no}.txt', 'w') as f:
+        f.write(message)
+    f.close()
+    return
+
+
 ### MAIN ---------------------------------------------------------------------------------------
 
 
@@ -326,7 +338,7 @@ def main():
     for j, exp in enumerate(experiment_list):
         t_start = time()
         print("Experiment: ", exp)
-        # Extract all directions for a given experiment
+        # Extract all files for a given experiment
         dirs = [dir for dir in dirs_all if int(dir[-1]) == exp]
 
         activity_list = []
@@ -388,12 +400,13 @@ def main():
 
             if save_density_plots:
                 if exp == 0:
-                    save_density_plot(dens_defects, activity_list[i], idx_first_frame)
-                elif exp < 5 and activity_list[i] < 0.33:
-                    save_density_plot(dens_defects, activity_list[i], idx_first_frame)
+                    save_density_plot(dens_defects, activity_list[i], idx_first_frame, exp)
+                elif exp < 10 and activity_list[i] < 0.33:
+                    save_density_plot(dens_defects, activity_list[i], idx_first_frame, exp)
 
         time_end = time()
-        print("Experiment ", exp, " finished in ", np.round((time_end - t_start) / 60, 2), " seconds")
+        print("Experiment ", exp, " finished in ", np.round((time_end - t_start) / 60, 2), " minutes")
+        gen_debug_txt(f'Experiment {exp} finished in {np.round((time_end - t_start) / 60, 2)} minutes', exp)
 
     model_params = ar.__dict__.copy()
     for key in params_discard_list:
@@ -401,8 +414,11 @@ def main():
         except: continue
         for key in model_params:
             model_params[key] = [model_params[key]]
+    
+    gen_debug_txt(f'Dictionary successfully saved to csv', 100)
 
     save_results(statistics_arr, activity_list, fluctuation_arr, window_sizes, model_params, Nexperiments)
+    gen_debug_txt(f'stat arrays successfully saved to csv', 1000)
 
 
 if __name__ == '__main__':
