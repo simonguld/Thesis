@@ -3,7 +3,7 @@ da.txt
 
 
 # file extensions
-.npy
+*.npy
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
