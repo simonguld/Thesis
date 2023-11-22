@@ -61,7 +61,7 @@ else:
 empty_output_folder = True
 if empty_output_folder:
     # delete all files in output folder
-    files = glob.glob(output_path + bracket + '*')
+    files = glob.glob(os.path.join(output_path, '*'))
     for f in files:
         os.remove(f)
 
@@ -82,12 +82,6 @@ def get_dir(Qxx, Qyx, return_S=False):
     else:
         return dx, dy
 
-def plot_flow_field(frame, engine = plt):
-        mp.nematic.plot.velocity(frame, engine)
-
-def plot_defects(frame, engine = plt):
-    mp.nematic.plot.director(frame, engine)
-    mp.nematic.plot.defects(frame, engine)    
 
 def get_defect_density(defect_list, area, return_charges=False):
         """
@@ -207,7 +201,6 @@ def get_density_fluctuations(top_defect_list, LX, LY, Nwindows, Ndof = 1):
     density_fluctuations = np.var(defect_densities, axis=0, ddof = Ndof)
     return density_fluctuations, window_sizes
 
-
 def calc_density_fluctuations(points_arr, window_sizes, N_center_points=None, Ndof=1, dist_to_boundaries=None, normalize=False):
     """
     Calculates the density fluctuations for a set of points in a 2D plane for different window sizes.
@@ -293,6 +286,44 @@ def calc_density_fluctuations(points_arr, window_sizes, N_center_points=None, Nd
 
     return var_counts, var_densities
 
+def get_density_fluctuations(top_defect_list, LX, LY, window_sizes, N_center_points = None, Ndof = 1, dist_to_boundaries = None, normalize = False):
+    """
+    Calculate defect density fluctuations for different window sizes
+    Parameters:
+    -----------
+    top_defect_list: list of dictionaries, each dictionary contains defect positions and charges for one frame
+    LX, LY: int, system size
+    Nwindows: int, number of windows to calculate defect density for
+    Ndof: int, number of degrees of freedom used to calculate variance (default: 1)
+    Returns:
+    --------
+    
+    defect_densities: array of defect densities for different window sizes
+
+    """
+    Nframes = len(top_defect_list)
+
+    # Intialize array of defect densities
+    defect_densities = np.zeros([Nframes, len(window_sizes)])
+
+    for frame, defects in enumerate(top_defect_list):
+        # Step 1: Convert list of dictionaries to array of defect positions
+        Ndefects = len(defects)
+        defect_positions = np.empty([Ndefects, 2])
+        for i, defect in enumerate(defects):
+            defect_positions[i] = defect['pos']
+
+        # Step 2: Calculate distance of each defect to center
+        distances = np.linalg.norm(defect_positions - center, axis=1)
+        # Step 3: Calculate density for each window size
+        for i, window_size in enumerate(window_sizes):
+            # Get defects within window
+            defects_in_window = len(distances[distances < window_size])
+            # Calculate  and store density
+            defect_densities[frame, i] = defects_in_window / (np.pi * window_size**2)
+    # Calculate fluctuations of defect density
+    density_fluctuations = np.var(defect_densities, axis=0, ddof = Ndof)
+    return density_fluctuations, window_sizes
 
 
 def est_stationarity(time_series, interval_len, Njump, Nconverged, max_sigma_dist = 2):
@@ -388,6 +419,7 @@ def gen_debug_txt(message = '', no = 0):
         f.write(message)
     f.close()
     return
+
 
 
 ### MAIN ---------------------------------------------------------------------------------------

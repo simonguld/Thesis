@@ -5,6 +5,7 @@
 
 ## Imports:
 
+from calendar import c
 import os
 import sys
 import pickle
@@ -20,6 +21,12 @@ import matplotlib.animation as ani
 from matplotlib import rcParams
 from sklearn.neighbors import KDTree
 from cycler import cycler
+from sympy import use
+from iminuit import Minuit
+
+sys.path.append('Appstat2022\\External_Functions')
+from ExternalFunctions import Chi2Regression, BinnedLH, UnbinnedLH
+from ExternalFunctions import nice_string_output, add_text_to_ax    # Useful functions to print fit results on figure
 
 
 ## Change directory to current one
@@ -236,12 +243,16 @@ def calc_density_fluctuations_mod2(points_arr, window_sizes, N_center_points=Non
     Npoints_within_boundaries = center_mask.sum()
     N_center_points = Npoints_within_boundaries if N_center_points is None else N_center_points
 
+    print("Number of points within boundaries: ", Npoints_within_boundaries)
+    print("Number of points to use: ", N_center_points)
+
     if N_center_points > Npoints_within_boundaries:
         print(f"Warning: N_center_points is larger than the number of points within the boundaries.\
                Using all {Npoints_within_boundaries} points within boundaries instead.")
         N_center_points = Npoints_within_boundaries
-        use_all_center_points = True
+
     # If N_center_points is equal to Npoints_within_boundaries, use all points within boundaries
+    use_all_center_points = (N_center_points == Npoints_within_boundaries)
     if use_all_center_points:
         center_points = points_arr[center_mask]
 
@@ -285,9 +296,9 @@ def calc_density_fluctuations_mod2(points_arr, window_sizes, N_center_points=Non
 
 def main():
     # create mock data
-    N = 10_000
-    N_center_points = 2_000
-    R = np.linspace(0.05, 0.2, 15)
+    N = 150_000
+    N_center_points = None
+    R = np.linspace(0.1,2, 20)
 
     x_boundaries = [0, 10]
     y_boundaries = [0, 10] 
@@ -296,30 +307,76 @@ def main():
     center_mask_y = (field[:, 1] - R[-1] >= y_boundaries[0]) & (field[:, 1] + R[-1] <= y_boundaries[1])
 
     center_mask = center_mask_x & center_mask_y
-
+    N_center_points = center_mask.sum()
+    N_center_points = int(N/3)
 
     t0 = time.time()
 
-    #counts_var, density_var = calc_density_fluctuations(field, R, N_center_points, x_boundaries = x_boundaries, y_boundaries = y_boundaries, normalize=True)
-    counts_var_mod, density_var_mod = calc_density_fluctuations_mod(field, R, N_center_points, dist_to_boundaries=R[-1], normalize=True)
-    counts_var_mod2, density_var_mod2 = calc_density_fluctuations_mod2(field, R, N_center_points, dist_to_boundaries=R[-1], normalize=True)
+    counts_var, density_var = calc_density_fluctuations(field, R, N_center_points, x_boundaries = x_boundaries, y_boundaries = y_boundaries, normalize=True)
+
+   # counts_var_mod, density_var_mod = calc_density_fluctuations_mod(field, R, N_center_points = N_center_points, dist_to_boundaries=R[-1], normalize=True)
+    counts_var_mod2, density_var_mod2 = calc_density_fluctuations_mod2(field, R, N_center_points = N_center_points, dist_to_boundaries=R[-1], normalize=True)
     t1 = time.time()
     print("Time elapsed: ", t1-t0)
 
     # plot results
-    fig, ax = plt.subplots()
-    ax.plot(R, density_var_mod2,'.-', label="Mod2")
-    ax.plot(R, density_var_mod,'.-', label="Modified")
-    ax.set_xlabel("Radius")
-    ax.set_ylabel("Density variance")
-    ax.legend()
+    fig1, ax1 = plt.subplots()
+    fig2, ax2 = plt.subplots()
 
-    fig, ax = plt.subplots()
-    ax.plot(R, counts_var_mod2, '.-', label="mod2",)
-    ax.plot(R, counts_var_mod, '.-',label="Modified")
-    ax.set_xlabel("Radius")
-    ax.set_ylabel("Count variance")
-    ax.legend()
+    vars = [density_var,  density_var_mod2]
+    counts = [counts_var,  counts_var_mod2]
+    colors = ["blue", "red", "green"]
+    labels = ["Original", "Modified", "Modified2"]
+
+    def power_func(x, a, b): #, c, d, e):
+            return  a + b * x ** 2
+    def power_func_sum(a, b, Y, X): #, c, d, e):
+            return np.sum(np.abs(Y - power_func(X, a, b)))
+
+
+    if 0:
+        power_fit = Minuit(power_func_sum, *param_guess)
+        power_fit.errordef = 1.0
+        print(power_fit.migrad())
+        x_vals = np.linspace(GDP_ranked[0], GDP_ranked[-1], 500)
+        y_vals = power_func(x_vals, *power_fit.values[:])
+        ax0.plot(x_vals, y_vals, label = r"Fit (no uncertainty)")
+        
+        ## calc residuals and typical uncertainty
+        residuals = happiness_ranked - power_func(GDP_ranked, *power_fit.values[:])
+        std = residuals.std(ddof = 1) 
+        print("typical happiness-index uncertainty: ", std)
+        ax0.errorbar(GDP_ranked, happiness_ranked, std, fmt = 'k.', elinewidth=.7, capsize=.7, capthick=.7)
+
+        err_fit = do_chi2_fit(power_func, GDP_ranked, happiness_ranked, std, power_fit.values)
+        ax0.plot(x_vals, power_func(x_vals, *err_fit.values), label = 'Fit (with uncertainty)')
+        d = generate_dictionary(err_fit, Ndatapoints = len(GDP_ranked))
+        # Plot figure text
+        text = nice_string_output(d, extra_spacing=0, decimals=5)
+        add_text_to_ax(0.27, 0.53, text, ax0, fontsize=13)
+
+
+    for i in range(len(vars)):
+        param_guess = np.array([counts[i][0] / R[0] ** 2])
+        power_fit = Minuit(lambda b: power_func_sum(0, b, counts[i], R), *param_guess)
+        power_fit.errordef = Minuit.LEAST_SQUARES
+        print(power_fit.migrad())
+        ax1.plot(R, vars[i], '.-', label=labels[i], color=colors[i], alpha=.5)
+        ax2.plot(R, counts[i],'.-', label=labels[i], color=colors[i], alpha=.5)
+        #ax2.plot(R, counts[i][0] * R**2 / R[0] ** 2, label=f"{labels[i]} R^2", color=colors[i], linestyle="--", alpha=.5)
+        ax2.plot(R, power_func(R, 0, *power_fit.values[:]), label=f"Fit: y = {np.round(power_fit.values[0],2)} R^2", color=colors[i], linestyle="--", alpha=.5)
+
+
+
+    ax1.set_xlabel("Radius")
+    ax1.set_ylabel("Density variance")
+    ax1.legend()
+    ax2.set_xlabel("Radius")
+    ax2.set_ylabel("Counts variance")
+    ax2.legend()
+
+
+
 
     plt.show()
 

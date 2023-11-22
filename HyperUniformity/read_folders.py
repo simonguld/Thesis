@@ -1,5 +1,8 @@
 import os, sys
 
+dir_path = os.path.dirname(os.path.realpath(__file__))
+os.chdir(dir_path)
+
 path = 'folder_names2.txt'
 
 
@@ -23,7 +26,7 @@ def main():
     
 
     for exp in range(Nexperiments):
-        # Extract all directions for a given experiment
+        # Extract all files for a given experiment
         dirs = [dir for dir in dirs_all if int(dir[-1]) == exp]
 
         keep_list = []
@@ -38,16 +41,22 @@ def main():
             else:
                 keep_list.append(zeta)
 
-        # Sort keep_list according to activity
-        keep_list = sorted(keep_list)
-
         # Remove folders with activities below the cutoff
         for i in reversed(pop_idx_list):
             dirs.pop(i)
 
+        for dir in dirs:
+            print(dir)
 
         # Sort dirs according to activity
         dirs = [x for _, x in sorted(zip(keep_list, dirs))]
+
+        # Sort keep_list according to activity
+        keep_list = sorted(keep_list)
+
+        print(keep_list)
+        for dir in dirs:
+            print(dir)
 
         Nfolders = len(dirs)
         print("Simulations with the following activities are kept: ", sorted(keep_list))
