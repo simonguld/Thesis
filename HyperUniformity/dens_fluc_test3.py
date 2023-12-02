@@ -155,6 +155,9 @@ def fit_func(x, alpha, beta):
 def power_func(x, b): #, c, d, e):
     return  b * x ** 2
 
+
+
+
 ### TODO:
 
 # Test all relevant Ns (100-750) for many exp across different Rmax (0.05-0.1). Plot chi2 vs. Rmax. Find optimal Rmax.
@@ -165,12 +168,14 @@ def power_func(x, b): #, c, d, e):
 
 def main():
     run_simulation = True
+    normalize = True
 
     # create mock data
-    N_list = np.arange(100,900,100) #np.arange(100,900,100) #15_000
-    Ntot = 300_000 # 300_000 #100_000
-    Nexp_list = (Ntot / N_list).astype('int')
-    N_center_points_fraction = .25
+    N_list = np.arange(100,800,200) #np.arange(100,900,100) #15_000
+    Ntot = 502 # 300_000 #100_000
+    Npoints = 700 * 5
+    Nexp_list = (Npoints / N_list).astype('int')
+    N_center_points_fraction = .2
     Nwindows = 20
 
 
@@ -179,15 +184,15 @@ def main():
     boundaries = [x_boundaries, y_boundaries]   
 
     R_boundary = 0.1 * x_boundaries[-1]
-    Rmin = 0.005 * x_boundaries[-1]
+    Rmin = 0.0075 * x_boundaries[-1]
     Rmax_list =  np.round(np.arange(0.05 * x_boundaries[-1], 0.16 * x_boundaries[-1], 0.01),3)
-    normalize = False
+    
 
     param_guess_lin = np.array([0.1, 3])
     param_guess_power = np.array([2400])
 
-    fitted_params_arr = np.zeros((len(N_list), len(Rmax_list), 2))
-    stats_arr = np.zeros((len(N_list), len(Rmax_list), 4))
+    fitted_params_arr = np.zeros((len(N_list), len(Rmax_list), Ntot, 2))
+    stats_arr = np.zeros((len(N_list), len(Rmax_list), Ntot, 2))
 
     if run_simulation:
         for k, N in enumerate(N_list):
@@ -200,56 +205,67 @@ def main():
                 R_boundary = R[-1]
                 N_center_points = int(N_center_points_fraction * (1 - 2 * R_boundary) ** 2 * N)
 
-                # calculate density fluctuations N times for statistics
-                counts_var = np.empty((Nexp_list[k], len(R)), dtype=float)
+                param_vals_arr = np.zeros((Ntot, 2))
+                stat_vals_arr = np.zeros((Ntot, 2))
 
-                for i in range(Nexp_list[k]):
-                    field = np.random.uniform(x_boundaries[0], x_boundaries[1], (N, 2))
-                    counts_var[i], _, _ = calc_density_fluctuations(field, R, boundaries = boundaries, \
-                                        N_center_points = N_center_points, dist_to_boundaries=R_boundary, normalize=normalize)
-                
+                for Nfit in np.arange(Ntot):
+                    # calculate density fluctuations N times for statistics
+                    counts_var = np.empty((Nexp_list[k], len(R)), dtype=float)
 
-                count_var_av = np.mean(counts_var, axis=0)
-                count_var_std = np.std(counts_var, axis=0, ddof=1) / np.sqrt(Nexp_list[k])
-                
-                count_var_av_log = np.log(count_var_av)
-                count_var_std_log = count_var_std / count_var_av
+                    for i in range(Nexp_list[k]):
+                        field = np.random.uniform(x_boundaries[0], x_boundaries[1], (N, 2))
+                        counts_var[i], _, _ = calc_density_fluctuations(field, R, boundaries = boundaries, \
+                                            N_center_points = N_center_points, dist_to_boundaries=R_boundary, normalize=normalize)
+                    
 
-                print("Relative error: ", count_var_std / count_var_av)
+                    count_var_av = np.mean(counts_var, axis=0)
+                    count_var_std = np.std(counts_var, axis=0, ddof=1) / np.sqrt(Nexp_list[k])
+                    
+                    count_var_av_log = np.log(count_var_av)
+                    count_var_std_log = count_var_std / count_var_av
 
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=np.VisibleDeprecationWarning)
-                    fit = do_chi2_fit(fit_func, np.log(R), count_var_av_log, count_var_std_log, param_guess_lin, verbose = False)
-                    power_fit = do_chi2_fit(power_func, R, count_var_av, count_var_std, param_guess_power, verbose = False)
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", category=np.VisibleDeprecationWarning)
+                        fit = do_chi2_fit(fit_func, np.log(R), count_var_av_log, count_var_std_log, param_guess_lin, verbose = False)
+                        power_fit = do_chi2_fit(power_func, R, count_var_av, count_var_std, param_guess_power, verbose = False)
 
-                Ndof, chi2, prop = get_statistics_from_fit(fit, len(R), subtract_1dof_for_binning = False)
-                _, _, prop_power = get_statistics_from_fit(power_fit, len(R), subtract_1dof_for_binning = False)
+                    Ndof, chi2, prop = get_statistics_from_fit(fit, len(R), subtract_1dof_for_binning = False)
+                    _, _, prop_power = get_statistics_from_fit(power_fit, len(R), subtract_1dof_for_binning = False)
 
-                stats_arr[k, j] = Ndof, chi2, prop, prop_power
-                fitted_params_arr[k, j] = fit.values['alpha'], fit.errors['alpha']
-                
+                    fitted_params_arr[k, j, Nfit] = fit.values['alpha'], fit.errors['alpha']
+                    stats_arr[k, j, Nfit] = prop, prop_power
+
                 t2 = time.time()
                 print("Time elapsed: ", np.round(t2-t0,2))
 
-            print(f"power pvals", stats_arr[k, :, 3])
-            print(f"linear pvals", stats_arr[k, :, 2])
-            print(f'alpha std', fitted_params_arr[k, :, 1].mean(), "\u00B1", fitted_params_arr[k, :, 1].std(ddof=1))
-
+    
         # save data
-        np.save(f"data/fitted_params_arr_nfrac{N_center_points_fraction}_ntot{Ntot}.npy", fitted_params_arr)
-        np.save(f"data/stats_arr_nfrac{N_center_points_fraction}_ntot{Ntot}.npy", stats_arr)
+        np.save(f"data/fitted_paramsv2_arr_nfrac{N_center_points_fraction}_ntot{Ntot}_normalize{normalize}.npy", fitted_params_arr)
+        np.save(f"data/stats_arrv2_nfrac{N_center_points_fraction}_ntot{Ntot}_normalize{normalize}.npy", stats_arr)
     else:
         #load
-        fitted_params_arr = np.load(f"data/fitted_params_arr_nfrac{N_center_points_fraction}_ntot{Ntot}.npy")
-        stats_arr = np.load(f"data/stats_arr_nfrac{N_center_points_fraction}_ntot{Ntot}.npy")
+        fitted_params_arr = np.load(f"data/fitted_params_arrv2_nfrac{N_center_points_fraction}_ntot{Ntot}_normalize{normalize}.npy")
+        stats_arr = np.load(f"data/stats_arrv2_nfrac{N_center_points_fraction}_ntot{Ntot}_normalize{normalize}.npy")
 
 
-    print("alpha errors: ", fitted_params_arr[:, :, 1].mean(axis=1), " +/-", fitted_params_arr[:, :, 1].std(axis=1, ddof=1))
+    # Find weighted mean across Nfit
+
+  #  params_mean, params_std = calc_weighted_mean(fitted_params_arr[:,:,:,0], fitted_params_arr[:,:,:,1], axis = -1)
+   # fitted_params_arr = np.stack((params_mean, params_std), axis = -1)
+    
+    fitted_params_mean = np.mean(fitted_params_arr[:,:,:,0], axis=2)
+    fitted_params_std = np.std(fitted_params_arr[:,:,:,0], axis=2, ddof=1) / np.sqrt(Ntot)
+    
+    fitted_params_arr = np.stack((fitted_params_mean, fitted_params_std), axis = -1)
+
+    stat_arr_std = np.std(stats_arr, axis=2, ddof=1) / np.sqrt(Ntot)
+    stats_arr = np.mean(stats_arr, axis=2)
+
 
     # plot results
-    fig, ax = plt.subplots(ncols = 3, nrows = 3, figsize = (12, 9))
+    fig, ax = plt.subplots(ncols = 2, nrows = 2, figsize = (12, 9))
     #fig2, ax2 = plt.subplots(ncols = 3, nrows = int(np.ceil(len(N_list) / 3)), figsize = (12, 10))
-    fig2, ax2 = plt.subplots(ncols = 3, nrows = 3, figsize = (12, 9))
+    fig2, ax2 = plt.subplots(ncols = 2, nrows = 2, figsize = (12, 9))
     ax = ax.flatten()
     ax2 = ax2.flatten()
 
@@ -268,10 +284,8 @@ def main():
             kwargs3 = {}
             kwargs4 = {}
 
-        ax2[i].plot(Rmax_list, stats_arr[i, :, 3], 's-', alpha = 0.34, **kwargs1, markersize = 4)
-        ax2[i].plot(Rmax_list, stats_arr[i, :, 2], 'o-', alpha = 0.34, **kwargs2, markersize = 4)
-       # ax2[i].plot(Rmax_list, np.ones_like(Rmax_list) * 0.05, '--', color = 'black', lw = 1.5,)
-       # ax2[i].plot(Rmax_list, np.ones_like(Rmax_list) * 0.01, '--', color = 'black',lw = 1.5,)
+        ax2[i].errorbar(Rmax_list, stats_arr[i, :, 1], yerr=stat_arr_std[i, :, 1], fmt = 's', color='teal', **kwargs1, alpha = 0.8, elinewidth = 1, capsize = 2, capthick = 1, markersize = 4)
+        ax2[i].errorbar(Rmax_list, stats_arr[i, :, 0], yerr=stat_arr_std[i, :, 0], fmt = 'o', color='navy', **kwargs2, alpha = 0.8, elinewidth = 1, capsize = 2, capthick = 1, markersize = 4)
 
         ax2[i].axhline(y = 0.05, color='black', linestyle='--', alpha=0.5, lw = 1.5)
         ax2[i].axhline(y = 0.01, color='black', linestyle='--', alpha=0.5, lw = 1.5)
@@ -281,19 +295,16 @@ def main():
         ax2[i].set_yticks([0.001, 0.01, 0.05, 0.1, 1], labels = [0.001, 0.01, 0.05, 0.1, 1])
     
 
-        ax2[i].text(0.01, 0.9, f'N = {N}, Nexp = {Nexp_list[i]}', transform=ax2[i].transAxes, fontsize=10, verticalalignment='bottom')
-        if i % 3 != 0:
+        ax2[i].text(0.01, 0.9, f'N = {N}, Nexp = {Ntot}', transform=ax2[i].transAxes, fontsize=10, verticalalignment='bottom')
+        if i % 2 != 0:
             ax2[i].yaxis.set_ticklabels([])
         
 
-    ax2[-1].axis('off')
 
     fig2.legend(loc='upper center', bbox_to_anchor=(0.5, 0.95), ncol=4, fontsize=12) #, fancybox=True, shadow=True)
     fig2.suptitle(r"Chi2 p-value of each fit vs. $R_{max}$")
     fig2.supxlabel(r"$R_{max}$")
     fig2.supylabel(r"p-value")
-  #  fig2.tight_layout()
-
 
     # plot parameters for different N against R max.
     # on the other y-axis, plot the p-value of the fit
@@ -302,15 +313,15 @@ def main():
          'black', 'red', 'cyan', 'yellow', 'khaki','lightblue']
     ylim = [np.min(fitted_params_arr[:, :, 0]) - 0.2 * np.abs(np.min(fitted_params_arr[:, :, 0])), np.max(fitted_params_arr[:, :, 0]) * 1.2]
     yticks = np.round(np.linspace(ylim[0], ylim[1], 5),2)
-    ylim = [-0.05, 0.15]
-    yticks = [-0.05, 0, 0.05, 0.10, 0.15]
+    ylim = [-0.1, 0.1]
+    yticks = [-0.1, -0.05, 0, 0.05, 0.10]
     xticks = [0.05, 0.075, 0.1, 0.125, 0.15]
 
     for i, N in enumerate(N_list):
         # find points where p-value is below 0.05
         cutoff = 0.01
-        p_value_mask = stats_arr[i, :, 2] < cutoff
-        p_value_mask_power = stats_arr[i, :, 3] < cutoff
+        p_value_mask = stats_arr[i, :, 0] < cutoff
+        p_value_mask_power = stats_arr[i, :, 1] < cutoff
 
         p_mask1 = p_value_mask & p_value_mask_power
         p_mask2 = p_value_mask & ~p_value_mask_power
@@ -328,12 +339,6 @@ def main():
             kwargs1 = {}
             kwargs2 = {}
 
-        print(Rmax_list[p_mask1])
-        print(Rmax_list[p_mask2])
-        print(Rmax_list[p_mask3])
-        print(Rmax_list[p_mask4])
-        print(fitted_params_arr[i, p_mask4, 0])
-   
         # if p_value_mask_power, plot as 'o', else as 'x'. If p_value_mask, plot as red else as blue
 
         ax[i].axhline(y = 0, color='black', linestyle='--', alpha=0.5, lw = 1.5)
@@ -351,23 +356,23 @@ def main():
         ax[i].yaxis.set_ticks(yticks)
         ax[i].xaxis.set_ticks(xticks)
 
-        if i % 3 != 0:
+        if i % 2 != 0:
             ax[i].yaxis.set_ticklabels([])
         
 
-    ax[-1].axis('off')
+
     # only add legend once to avoid duplicates
   #  fig.legend(loc='upper center', bbox_to_anchor=(0.5, 0.96), ncol=2, fancybox=True, shadow=True)
 
-    fig.suptitle(r"Fit parameter $\alpha$ vs. $R_{max}$")
+    fig.suptitle(r"Av. fit parameter $\langle \alpha \rangle$ vs. $R_{max}$")
     fig.supxlabel(r"$R_{max}$")
-    fig.supylabel(r"$\alpha$")
+    fig.supylabel(rf"$\langle \alpha \rangle$ (av. of {Ntot} fits)")
     fig.tight_layout()
 
     # save figures in 420 dpi
 
-    fig.savefig(f"figs/alpha_vs_Rmax_{N_center_points_fraction}_ntot{Ntot}.png", dpi=420, format='png')
-    fig2.savefig(f"figs/pval_vs_Rmax_{N_center_points_fraction}_ntot{Ntot}.png", dpi=420, bbox_inches='tight', format='png')
+    fig.savefig(f"figs/alpha_vs_Rmaxv2_{N_center_points_fraction}_ntot{Ntot}_normalize{normalize}.png", dpi=420, format='png')
+    fig2.savefig(f"figs/pval_vs_Rmaxv2_{N_center_points_fraction}_ntot{Ntot}_normalize{normalize}.png", dpi=420, bbox_inches='tight', format='png')
 
 
 
