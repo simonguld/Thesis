@@ -12,7 +12,7 @@ from sklearn.neighbors import KDTree
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+from statsmodels.tsa.stattools import adfuller
 
 sys.path.append('C:\\Users\\Simon Andersen\\Projects\\Projects\\Appstat2022\\External_Functions')
 from ExternalFunctions import Chi2Regression, BinnedLH, UnbinnedLH
@@ -216,3 +216,36 @@ def calc_weighted_mean(x, dx, axis = -1):
 
     return mean, np.sqrt(var)
 
+def calc_weighted_mean_vec(x, dx):
+    """
+    returns: weighted mean, error on mean, Ndof, Chi2, p_val
+    """
+    assert(len(x) > 1)
+    assert(len(x) == len(dx))
+    
+    var = 1 / np.sum(1 / dx ** 2)
+    mean = np.sum(x / dx ** 2) * var
+
+    # Calculate statistics
+    Ndof = len(x) - 1
+    chi2 = np.sum((x - mean) ** 2 / dx ** 2)
+    p_val = stats.chi2.sf(chi2, Ndof)
+
+    return mean, np.sqrt(var), Ndof, chi2, p_val
+
+def do_adf_test(time_series, maxlag = None, autolag = 'AIC', regression = 'c', verbose = True):
+    """
+    Performs the augmented Dickey-Fuller test on a time series.
+    """
+    result = adfuller(time_series, maxlag = maxlag, autolag = autolag, regression = regression)
+    if verbose:
+        print(f'ADF Statistic: {result[0]}')
+        print(f'p-value: {result[1]}')
+        print(f'nobs used: {result[3]}')
+        print(f'lags used: {result[2]}')
+        print(f'Critical Values:')
+        
+        for key, value in result[4].items():
+            print(f'\t{key}: {value}')
+
+    return result

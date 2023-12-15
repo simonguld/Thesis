@@ -228,6 +228,7 @@ def calc_density_fluctuations(points_arr, window_sizes, boundaries = None, N_cen
         # Calculate no. of points within circle for each point
         counts = tree.query_radius(center_points, r=radius, count_only=True)
 
+
         # Calculate average counts
         av_counts[i] = np.mean(counts)
 
