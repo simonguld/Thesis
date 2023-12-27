@@ -128,6 +128,9 @@ def calc_density_fluctuations(points_arr, window_sizes, boundaries=None, N_cente
             indices = np.random.choice(np.arange(Npoints)[center_mask], N_center_points, replace=False)
             center_points = points_arr[indices]
 
+        N = center_points.shape[0]
+        center_points += 0 #0.02 * (xmax-xmin) * np.random.rand(N, 2)
+
         # Calculate no. of points within circle for each point
         counts = tree.query_radius(center_points, r=radius, count_only=True)
 
@@ -167,10 +170,10 @@ def main():
     run_simulation = True
 
     # create mock data
-    N_list = np.arange(100,900,100) #np.arange(100,900,100) #15_000
-    Ntot = 300_000 # 300_000 #100_000
+    N_list = np.arange(500,5000,4000) #np.arange(100,900,100) #15_000
+    Ntot = 40_000 # 300_000 #100_000
     Nexp_list = (Ntot / N_list).astype('int')
-    N_center_points_fraction = .25
+    N_center_points_fraction = .2
     Nwindows = 20
 
 
@@ -179,8 +182,8 @@ def main():
     boundaries = [x_boundaries, y_boundaries]   
 
     R_boundary = 0.1 * x_boundaries[-1]
-    Rmin = 0.005 * x_boundaries[-1]
-    Rmax_list =  np.round(np.arange(0.05 * x_boundaries[-1], 0.16 * x_boundaries[-1], 0.01),3)
+    Rmin = 0.01 * x_boundaries[-1]
+    Rmax_list =  np.round(np.arange(0.1 * x_boundaries[-1], 0.15 * x_boundaries[-1], 0.02),3)
     normalize = False
 
     param_guess_lin = np.array([0.1, 3])
@@ -219,7 +222,7 @@ def main():
 
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=np.VisibleDeprecationWarning)
-                    fit = do_chi2_fit(fit_func, np.log(R), count_var_av_log, count_var_std_log, param_guess_lin, verbose = False)
+                    fit = do_chi2_fit(fit_func, np.log(R), count_var_av_log, count_var_std_log, param_guess_lin, verbose = True)
                     power_fit = do_chi2_fit(power_func, R, count_var_av, count_var_std, param_guess_power, verbose = False)
 
                 Ndof, chi2, prop = get_statistics_from_fit(fit, len(R), subtract_1dof_for_binning = False)
@@ -227,6 +230,15 @@ def main():
 
                 stats_arr[k, j] = Ndof, chi2, prop, prop_power
                 fitted_params_arr[k, j] = fit.values['alpha'], fit.errors['alpha']
+
+                fig, ax = plt.subplots()
+                ax.errorbar(R, count_var_av, yerr=count_var_std, fmt = 'o', color = 'black', alpha = 0.5, elinewidth = 1, capsize = 2, capthick = 1, markersize = 4)
+                ax.plot(R, np.exp(fit_func(np.log(R), *fit.values)), '-', color = 'red', label = rf'Fit: $y = 2 \beta + 2 x$')
+                ax.plot(R, power_func(R, *power_fit.values), '-', color = 'blue', label = rf'Fit: $y = \beta x^2$')
+                ax.legend()
+               # ax.set_xscale('log')
+               # ax.set_yscale('log')
+                plt.show()
                 
                 t2 = time.time()
                 print("Time elapsed: ", np.round(t2-t0,2))
@@ -236,8 +248,8 @@ def main():
             print(f'alpha std', fitted_params_arr[k, :, 1].mean(), "\u00B1", fitted_params_arr[k, :, 1].std(ddof=1))
 
         # save data
-        np.save(f"data/fitted_params_arr_nfrac{N_center_points_fraction}_ntot{Ntot}.npy", fitted_params_arr)
-        np.save(f"data/stats_arr_nfrac{N_center_points_fraction}_ntot{Ntot}.npy", stats_arr)
+   #     np.save(f"data/fitted_params_arr_nfrac{N_center_points_fraction}_ntot{Ntot}.npy", fitted_params_arr)
+    #    np.save(f"data/stats_arr_nfrac{N_center_points_fraction}_ntot{Ntot}.npy", stats_arr)
     else:
         #load
         fitted_params_arr = np.load(f"data/fitted_params_arr_nfrac{N_center_points_fraction}_ntot{Ntot}.npy")
@@ -347,7 +359,7 @@ def main():
                         yerr=fitted_params_arr[i, p_mask4, 1], fmt = '.', color = colors[1], **kwargs1, **kwargs)
 
         ax[i].text(0.01, 0.9, f'N = {N}, Nexp = {Nexp_list[i]}', transform=ax[i].transAxes, fontsize=10, verticalalignment='bottom')
-        ax[i].set_ylim(ylim)
+     #   ax[i].set_ylim(ylim)
         ax[i].yaxis.set_ticks(yticks)
         ax[i].xaxis.set_ticks(xticks)
 
