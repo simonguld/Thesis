@@ -1,9 +1,11 @@
+# Author: Simon Guldager Andersen
+# Date(last edit): 05-01-2024
+
 ## Imports:
 import os
 import sys
 import warnings
 import time
-
 
 import numpy as np
 import pandas as pd
@@ -21,8 +23,13 @@ sys.path.append('C:\\Users\\Simon Andersen\\Projects\\Projects\\Appstat2022\\Ext
 from ExternalFunctions import Chi2Regression, BinnedLH, UnbinnedLH
 from ExternalFunctions import nice_string_output, add_text_to_ax    # Useful functions to print fit results on figure
 
+
+# Functions for nematic analysis  -----------------------------------------------------
+
 def get_dir(Qxx, Qyx, return_S=False):
     """
+    This function has been provided by Lasse Frederik Bonn:
+
     get director nx, ny from Order parameter Qxx, Qyx
     """
     S = np.sqrt(Qxx**2+Qyx**2)
@@ -33,57 +40,6 @@ def get_dir(Qxx, Qyx, return_S=False):
         return dx, dy, S
     else:
         return dx, dy
-
-def get_statistics_from_fit(fitting_object, Ndatapoints, subtract_1dof_for_binning = False):
-    
-    Nparameters = len(fitting_object.values[:])
-    if subtract_1dof_for_binning:
-        Ndof = Ndatapoints - Nparameters - 1
-    else:
-        Ndof = Ndatapoints - Nparameters
-    chi2 = fitting_object.fval
-    prop = stats.chi2.sf(chi2, Ndof)
-    return Ndof, chi2, prop
-
-def do_chi2_fit(fit_function, x, y, dy, parameter_guesses, verbose = True):
-
-    chi2_object = Chi2Regression(fit_function, x, y, dy)
-    fit = Minuit(chi2_object, *parameter_guesses)
-    fit.errordef = Minuit.LEAST_SQUARES
-
-    if verbose:
-        print(fit.migrad())
-    else:
-        fit.migrad()
-    return fit
-
-def generate_dictionary(fitting_object, Ndatapoints, chi2_fit = True, chi2_suffix = None, subtract_1dof_for_binning = False):
-
-    Nparameters = len(fitting_object.values[:])
-    if chi2_suffix is None:
-        chi2_suffix = ''
-    else:
-        chi2_suffix = f'({chi2_suffix})'
-   
-    dictionary = {f'{chi2_suffix} Npoints': Ndatapoints}
-
-
-    for i in range(Nparameters):
-        dict_new = {f'{chi2_suffix} {fitting_object.parameters[i]}': [fitting_object.values[i], fitting_object.errors[i]]}
-        dictionary.update(dict_new)
-    if subtract_1dof_for_binning:
-        Ndof = Ndatapoints - Nparameters - 1
-    else:
-        Ndof = Ndatapoints - Nparameters
-
-    dictionary.update({f'{chi2_suffix} Ndof': Ndof})
-
-    if chi2_fit:
-        chi2 = fitting_object.fval
-        p = stats.chi2.sf(chi2, Ndof)   
-        dictionary.update({f'{chi2_suffix} chi2': chi2, f'{chi2_suffix} pval': p})
-
-    return dictionary
 
 def get_defect_list(archive, LX, LY, idx_first_frame=0, Nframes = None, verbose=False):
     """
@@ -118,6 +74,18 @@ def get_defect_list(archive, LX, LY, idx_first_frame=0, Nframes = None, verbose=
         print('Time to get defect list: %.2f s' % t_end)
 
     return top_defects
+
+def get_defect_arr_from_frame(defect_dict):
+    """
+    Convert dictionary of defects to array of defect positions
+    """
+    Ndefects = len(defect_dict)
+    if Ndefects == 0:
+        return None
+    defect_positions = np.empty([Ndefects, 2])
+    for i, defect in enumerate(defect_dict):
+        defect_positions[i] = defect['pos']
+    return defect_positions
 
 def get_defect_density(defect_list, area, return_charges=False, save = False, save_path = None,):
         """
@@ -305,6 +273,59 @@ def get_density_fluctuations(top_defect_list, window_sizes, boundaries = None, N
 
     return count_fluctuation_arr, av_count_arr
 
+
+### Functions for statistical analysis ------------------------------------------------
+
+def get_statistics_from_fit(fitting_object, Ndatapoints, subtract_1dof_for_binning = False):
+    
+    Nparameters = len(fitting_object.values[:])
+    if subtract_1dof_for_binning:
+        Ndof = Ndatapoints - Nparameters - 1
+    else:
+        Ndof = Ndatapoints - Nparameters
+    chi2 = fitting_object.fval
+    prop = stats.chi2.sf(chi2, Ndof)
+    return Ndof, chi2, prop
+
+def do_chi2_fit(fit_function, x, y, dy, parameter_guesses, verbose = True):
+
+    chi2_object = Chi2Regression(fit_function, x, y, dy)
+    fit = Minuit(chi2_object, *parameter_guesses)
+    fit.errordef = Minuit.LEAST_SQUARES
+
+    if verbose:
+        print(fit.migrad())
+    else:
+        fit.migrad()
+    return fit
+
+def generate_dictionary(fitting_object, Ndatapoints, chi2_fit = True, chi2_suffix = None, subtract_1dof_for_binning = False):
+
+    Nparameters = len(fitting_object.values[:])
+    if chi2_suffix is None:
+        chi2_suffix = ''
+    else:
+        chi2_suffix = f'({chi2_suffix})'
+   
+    dictionary = {f'{chi2_suffix} Npoints': Ndatapoints}
+
+
+    for i in range(Nparameters):
+        dict_new = {f'{chi2_suffix} {fitting_object.parameters[i]}': [fitting_object.values[i], fitting_object.errors[i]]}
+        dictionary.update(dict_new)
+    if subtract_1dof_for_binning:
+        Ndof = Ndatapoints - Nparameters - 1
+    else:
+        Ndof = Ndatapoints - Nparameters
+
+    dictionary.update({f'{chi2_suffix} Ndof': Ndof})
+
+    if chi2_fit:
+        chi2 = fitting_object.fval
+        p = stats.chi2.sf(chi2, Ndof)   
+        dictionary.update({f'{chi2_suffix} chi2': chi2, f'{chi2_suffix} pval': p})
+
+    return dictionary
 
 def runstest(residuals):
    
