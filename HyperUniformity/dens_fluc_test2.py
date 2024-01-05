@@ -170,11 +170,11 @@ def main():
     run_simulation = True
 
     # create mock data
-    N_list = np.arange(500,5000,4000) #np.arange(100,900,100) #15_000
-    Ntot = 40_000 # 300_000 #100_000
+    N_list = np.arange(100,3500,400) #np.arange(100,900,100) #15_000
+    Ntot = 80_000 # 300_000 #100_000
     Nexp_list = (Ntot / N_list).astype('int')
-    N_center_points_fraction = .2
-    Nwindows = 20
+    N_center_points_fraction = 1
+    Nwindows = 30
 
 
     x_boundaries = [0, 1]
@@ -182,8 +182,8 @@ def main():
     boundaries = [x_boundaries, y_boundaries]   
 
     R_boundary = 0.1 * x_boundaries[-1]
-    Rmin = 0.01 * x_boundaries[-1]
-    Rmax_list =  np.round(np.arange(0.1 * x_boundaries[-1], 0.15 * x_boundaries[-1], 0.02),3)
+    Rmin = 0.005 * x_boundaries[-1]
+    Rmax_list = np.round(np.arange(0.1 * x_boundaries[-1], 0.2 * x_boundaries[-1], 0.1),3)
     normalize = False
 
     param_guess_lin = np.array([0.1, 3])
@@ -198,7 +198,8 @@ def main():
             for j, Rmax in enumerate(Rmax_list):
                 print(f"Beginning analysis for Rmax =  {Rmax}")
                 t0 = time.time()
-                R = np.logspace(np.log10(Rmin), np.log10(Rmax), Nwindows)  
+              #  R = np.logspace(np.log10(Rmin), np.log10(Rmax), Nwindows)  
+                R = np.linspace(Rmin, Rmax, Nwindows)
     
                 R_boundary = R[-1]
                 N_center_points = int(N_center_points_fraction * (1 - 2 * R_boundary) ** 2 * N)
@@ -340,11 +341,6 @@ def main():
             kwargs1 = {}
             kwargs2 = {}
 
-        print(Rmax_list[p_mask1])
-        print(Rmax_list[p_mask2])
-        print(Rmax_list[p_mask3])
-        print(Rmax_list[p_mask4])
-        print(fitted_params_arr[i, p_mask4, 0])
    
         # if p_value_mask_power, plot as 'o', else as 'x'. If p_value_mask, plot as red else as blue
 

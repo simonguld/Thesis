@@ -233,6 +233,34 @@ def calc_weighted_mean_vec(x, dx):
 
     return mean, np.sqrt(var), Ndof, chi2, p_val
 
+def calc_corr_matrix(x):
+    """assuming that each column of x represents a separate variable"""
+   
+    data = x.astype('float')
+    rows, cols = data.shape
+    corr_matrix = np.empty([cols, cols])
+ 
+    for i in range(cols):
+        for j in range(i, cols):
+                corr_matrix[i,j] = (np.mean(data[:,i] * data[:,j]) - data[:,i].mean() * data[:,j].mean()) / (data[:,i].std(ddof = 0) * data[:,j].std(ddof = 0))
+
+        corr_matrix[j,i] = corr_matrix[i,j]
+    return corr_matrix
+
+def prop_err(dzdx, dzdy, x, y, dx, dy, correlation = 0):
+    """ derivatives must takes arguments (x,y)
+    """
+    var_from_x = dzdx(x,y) ** 2 * dx ** 2
+    var_from_y = dzdy (x, y) ** 2 * dy ** 2
+    interaction = 2 * correlation * dzdx(x, y) * dzdy (x, y) * dx * dy
+
+    prop_err = np.sqrt(var_from_x + var_from_y + interaction)
+
+    if correlation == 0:
+        return prop_err, np.sqrt(var_from_x), np.sqrt(var_from_y)
+    else:
+        return prop_err
+
 def do_adf_test(time_series, maxlag = None, autolag = 'AIC', regression = 'c', verbose = True):
     """
     Performs the augmented Dickey-Fuller test on a time series.
