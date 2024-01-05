@@ -2,6 +2,7 @@
 import os
 import sys
 import warnings
+import time
 
 
 import numpy as np
@@ -14,10 +15,24 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from statsmodels.tsa.stattools import adfuller
 
+import massPy as mp
+
 sys.path.append('C:\\Users\\Simon Andersen\\Projects\\Projects\\Appstat2022\\External_Functions')
 from ExternalFunctions import Chi2Regression, BinnedLH, UnbinnedLH
 from ExternalFunctions import nice_string_output, add_text_to_ax    # Useful functions to print fit results on figure
 
+def get_dir(Qxx, Qyx, return_S=False):
+    """
+    get director nx, ny from Order parameter Qxx, Qyx
+    """
+    S = np.sqrt(Qxx**2+Qyx**2)
+    dx = np.abs(np.sqrt((np.ones_like(S) + Qxx/S)/2))
+    dy = np.sqrt((np.ones_like(S)-Qxx/S)/2)*np.sign(Qyx)
+    
+    if return_S:
+        return dx, dy, S
+    else:
+        return dx, dy
 
 def get_statistics_from_fit(fitting_object, Ndatapoints, subtract_1dof_for_binning = False):
     
@@ -70,7 +85,74 @@ def generate_dictionary(fitting_object, Ndatapoints, chi2_fit = True, chi2_suffi
 
     return dictionary
 
-def calc_density_fluctuations(points_arr, window_sizes, boundaries=None, N_center_points=None, Ndof=1, dist_to_boundaries=None, normalize=False, verbose=False):
+def get_defect_list(archive, LX, LY, idx_first_frame=0, Nframes = None, verbose=False):
+    """
+    Get list of topological defects for each frame in archive
+    Parameters:
+        archive: massPy archive object
+        LX, LY: system size
+        verbose: print time to get defect list
+    Returns:
+        top_defects: list of lists of dictionaries holding defect charge and position for each frame 
+    """
+    # Initialize list of top. defects
+    top_defects = []
+
+    Nframes = archive.__dict__['num_frames'] if Nframes is None else Nframes
+    if verbose:
+        t_start = time.time()
+
+    # Loop over frames
+    for i in range(idx_first_frame, Nframes):
+        # Load frame
+        frame = archive._read_frame(i)
+        Qxx_dat = frame.QQxx.reshape(LX, LY)
+        Qyx_dat = frame.QQyx.reshape(LX, LY)
+        # Get defects
+        defects = mp.nematic.nematicPy.get_defects(Qxx_dat, Qyx_dat, LX, LY)
+        # Add to list
+        top_defects.append(defects)
+
+    if verbose:
+        t_end = time.time() - t_start
+        print('Time to get defect list: %.2f s' % t_end)
+
+    return top_defects
+
+def get_defect_density(defect_list, area, return_charges=False, save = False, save_path = None,):
+        """
+        Get defect density for each frame in archive
+        parameters:
+            defect_list: list of lists of dictionaries holding defect charge and position for each frame 
+            area: Area of system
+            return_charges: if True, return list of densities of positive and negative defects
+        returns:
+            dens_defects: list of defect densities
+        """
+
+        if return_charges:
+            # Initialize list of defect densities
+            dens_pos_defects = []
+            dens_neg_defects = []
+            for defects in defect_list:
+                # Get no. of defects
+                nposdef = len([d for d in defects if d['charge'] == 0.5])
+                nnegdef = len([d for d in defects if d['charge'] == -0.5])
+
+                dens_pos_defects.append(nposdef / area)
+                dens_neg_defects.append(nnegdef / area)
+            return dens_pos_defects, dens_neg_defects
+        else:
+            dens_defects = []
+            for defects in defect_list:
+                # Get no. of defects
+                ndef = len(defects)
+                dens_defects.append(ndef / area)
+            if save:
+                np.savetxt(save_path, dens_defects)
+            return dens_defects
+
+def calc_density_fluctuations(points_arr, window_sizes, boundaries = None, N_center_points=None, Ndof=1, dist_to_boundaries=None, normalize=False):
     """
     Calculates the density fluctuations for a set of points in a 2D plane for different window sizes.
     For each window_size (i.e. radius), the density fluctuations are calculated by choosing N_center_points random points
@@ -119,14 +201,11 @@ def calc_density_fluctuations(points_arr, window_sizes, boundaries=None, N_cente
     Npoints_within_boundaries = center_mask.sum()
     N_center_points = Npoints_within_boundaries if N_center_points is None else N_center_points
 
-    if verbose:
-        print("Number of points within boundaries: ", Npoints_within_boundaries)
-        print("Number of points to use: ", N_center_points)
+    #logging.info(f"Number of points within boundaries: {Npoints_within_boundaries}")
 
     if N_center_points > Npoints_within_boundaries:
-        if verbose:
-            print(f"Warning: N_center_points is larger than the number of points within the boundaries.\
-                Using all {Npoints_within_boundaries} points within boundaries instead.")
+        print(f"Warning: N_center_points is larger than the number of points within the boundaries.\
+               Using all {Npoints_within_boundaries} points within boundaries instead.")
         N_center_points = Npoints_within_boundaries
 
     # If N_center_points is equal to Npoints_within_boundaries, use all points within boundaries
@@ -141,7 +220,11 @@ def calc_density_fluctuations(points_arr, window_sizes, boundaries=None, N_cente
     # Initialize density array, density variance array, and counts variance arrays
     var_counts = np.empty_like(window_sizes, dtype=float)
     var_densities = np.empty_like(var_counts)
-    av_counts = np.empty_like(var_counts)
+    av_counts = np.zeros_like(var_counts)
+
+    if N_center_points == 0:
+        print(f"No points within boundaries. Returning NaNs")
+        return np.nan * var_counts, np.nan * var_densities, av_counts
 
     for i, radius in enumerate(window_sizes):
         if use_all_center_points:
@@ -170,6 +253,58 @@ def calc_density_fluctuations(points_arr, window_sizes, boundaries=None, N_cente
             var_densities /= av_densities**2
 
     return var_counts, var_densities, av_counts
+
+def get_density_fluctuations(top_defect_list, window_sizes, boundaries = None, N_center_points = None, Ndof = 1, \
+                             dist_to_boundaries = None, normalize = False, save = False, save_path_av_counts = None, save_path_var_counts = None):
+    """
+    Calculate defect density fluctuations for different window sizes
+    Parameters:
+    -----------
+    top_defect_list: list of dictionaries, each dictionary contains defect positions and charges for one frame
+    window_sizes: array of window sizes (i.e. radii) for which to calculate density fluctuations
+    N_center_points: number of center points to use for each window size. If None, all points are used.
+    Ndof: number of degrees of freedom to use for variance calculation
+    dist_to_boundaries: maximum distance to the boundaries. Centers will be chosen within this region.
+    normalize: if True, the density fluctuations are normalized by the square of the average density of the system.
+    save: if True, save density fluctuations to file
+    save_path_av_counts: path to file to save average counts
+    save_path_var_counts: path to file to save count fluctuations
+    Returns:
+    --------
+    
+    defect_densities: array of defect densities for different window sizes
+
+    """
+    Nframes = len(top_defect_list)
+    Nwindows = len(window_sizes)
+
+    # Intialize array of count fluctuations and average counts
+    count_fluctuation_arr = np.zeros([Nframes, len(window_sizes)])
+    av_count_arr = np.zeros_like(count_fluctuation_arr)
+
+    for frame, defects in enumerate(top_defect_list):
+        # Step 1: Convert list of dictionaries to array of defect positions
+        Ndefects = len(defects)
+        if Ndefects == 0:
+            count_fluctuation_arr[frame] = np.nan
+            av_count_arr[frame] = 0
+            continue
+
+        defect_positions = np.empty([Ndefects, 2])
+        for i, defect in enumerate(defects):
+            defect_positions[i] = defect['pos']
+        #logging.info(f"Frame {frame} has {Ndefects} defects")
+
+        # Calculate density fluctuations
+        count_fluctuation_arr[frame], _, av_count_arr[frame] = calc_density_fluctuations(defect_positions, window_sizes,\
+                                         boundaries = boundaries,N_center_points=N_center_points, Ndof=Ndof, \
+                                            dist_to_boundaries=dist_to_boundaries, normalize=normalize)
+    if save:
+        np.savetxt(save_path_var_counts, count_fluctuation_arr)
+        np.savetxt(save_path_av_counts, av_count_arr)
+
+    return count_fluctuation_arr, av_count_arr
+
 
 def runstest(residuals):
    
