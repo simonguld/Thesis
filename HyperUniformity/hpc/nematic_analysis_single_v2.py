@@ -1,79 +1,50 @@
-# Author: Simon Guldager Andersen
-# Date(last edit): 05-01-2024
+# Author:  Simon Guldager
+# Date (latest update): 
+
+### SETUP ------------------------------------------------------------------------------------
 
 ## Imports:
+from calendar import c
 import os
 import sys
+import pickle
 import warnings
 import time
+import argparse
 
 import numpy as np
-import pandas as pd
-from iminuit import Minuit
-from scipy import stats
-from sklearn.neighbors import KDTree
+from sklearn.neighbors import KDTree, radius_neighbors_graph
+from sympy import rad
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-from statsmodels.tsa.stattools import adfuller
+sys.path.append('/groups/astro/kpr279/')
+sys.path.append('/groups/astro/kpr279/.local/lib/python3.8/site-packages/')
+
+from structure_factor.point_pattern import PointPattern
+from structure_factor.spatial_windows import BoxWindow, BallWindow
+from structure_factor.hyperuniformity import bin_data, hyperuniformity_class
+from structure_factor.data import load_data
+from structure_factor.point_processes import GinibrePointProcess
+from structure_factor.structure_factor import StructureFactor
+import structure_factor.pair_correlation_function as pcf
 
 import massPy as mp
 
-sys.path.append('C:\\Users\\Simon Andersen\\Projects\\Projects\\Appstat2022\\External_Functions')
-from ExternalFunctions import Chi2Regression, BinnedLH, UnbinnedLH
-from ExternalFunctions import nice_string_output, add_text_to_ax    # Useful functions to print fit results on figure
+## Change directory to current one
+dir_path = os.path.dirname(os.path.realpath(__file__))
+os.chdir(dir_path)
+sys.path.append(os.getcwd())
 
 
-# Functions for nematic analysis  -----------------------------------------------------
+development_mode = False
+check_for_convergence = False
 
-def get_dir(Qxx, Qyx, return_S=False):
-    """
-    This function has been provided by Lasse Frederik Bonn:
+# if development_mode, use only few frames
+if development_mode:
+    num_frames = 3
 
-    get director nx, ny from Order parameter Qxx, Qyx
-    """
-    S = np.sqrt(Qxx**2+Qyx**2)
-    dx = np.abs(np.sqrt((np.ones_like(S) + Qxx/S)/2))
-    dy = np.sqrt((np.ones_like(S)-Qxx/S)/2)*np.sign(Qyx)
-    
-    if return_S:
-        return dx, dy, S
-    else:
-        return dx, dy
 
-def get_defect_list(archive, LX, LY, idx_first_frame=0, Nframes = None, verbose=False):
-    """
-    Get list of topological defects for each frame in archive
-    Parameters:
-        archive: massPy archive object
-        LX, LY: system size
-        verbose: print time to get defect list
-    Returns:
-        top_defects: list of lists of dictionaries holding defect charge and position for each frame 
-    """
-    # Initialize list of top. defects
-    top_defects = []
+### FUNCTIONS ----------------------------------------------------------------------------------
 
-    Nframes = archive.__dict__['num_frames'] if Nframes is None else Nframes
-    if verbose:
-        t_start = time.time()
-
-    # Loop over frames
-    for i in range(idx_first_frame, Nframes - idx_first_frame):
-        # Load frame
-        frame = archive._read_frame(i)
-        Qxx_dat = frame.QQxx.reshape(LX, LY)
-        Qyx_dat = frame.QQyx.reshape(LX, LY)
-        # Get defects
-        defects = mp.nematic.nematicPy.get_defects(Qxx_dat, Qyx_dat, LX, LY)
-        # Add to list
-        top_defects.append(defects)
-
-    if verbose:
-        t_end = time.time() - t_start
-        print('Time to get defect list: %.2f s' % t_end)
-
-    return top_defects
 
 def get_defect_arr_from_frame(defect_dict):
     """
@@ -86,6 +57,45 @@ def get_defect_arr_from_frame(defect_dict):
     for i, defect in enumerate(defect_dict):
         defect_positions[i] = defect['pos']
     return defect_positions
+
+
+def get_defect_list(archive, LX, LY, idx_first_frame=0, verbose=False):
+    """
+    Get list of topological defects for each frame in archive
+    Parameters:
+        archive: massPy archive object
+        LX, LY: system size
+        verbose: print time to get defect list
+    Returns:
+        top_defects: list of lists of dictionaries holding defect charge and position for each frame 
+    """
+    # Initialize list of top. defects
+    top_defects = []
+
+    if verbose:
+        t_start = time.time()
+    if not development_mode:
+        Nframes = archive.__dict__['num_frames']
+    else:  
+        Nframes = num_frames
+
+    # Loop over frames
+    for i in range(idx_first_frame, Nframes):
+        # Load frame
+        frame = archive._read_frame(i)
+        Qxx_dat = frame.QQxx.reshape(LX, LY)
+        Qyx_dat = frame.QQyx.reshape(LX, LY)
+        # Get defects
+        defects = mp.nematic.nematicPy.get_defects(Qxx_dat, Qyx_dat, LX, LY)
+        # Add to list
+        top_defects.append(defects)
+
+    if verbose:
+        t_end = time.time() - t_start
+        # print 2 with 2 decimals
+        print('Time to get defect list: %.2f s' % t_end)
+
+    return top_defects
 
 def get_defect_density(defect_list, area, return_charges=False, save = False, save_path = None,):
         """
@@ -273,163 +283,216 @@ def get_density_fluctuations(top_defect_list, window_sizes, boundaries = None, N
 
     return count_fluctuation_arr, av_count_arr
 
+def get_structure_factor(top_defect_list, box_window, kmax = 1, debiased = True, direct = True, nbins = 50, \
+                         corr_func_method = "fv", method_kwargs = dict(method="b", spar=0.2, nknots = 40), rmax = 10):
+    """
+    Calculate structure factor for the frames in frame_interval
+    """
 
-### Functions for statistical analysis ------------------------------------------------
+    # Get number of frames
+    Nframes = len(top_defect_list)
 
-def get_statistics_from_fit(fitting_object, Ndatapoints, subtract_1dof_for_binning = False):
-    
-    Nparameters = len(fitting_object.values[:])
-    if subtract_1dof_for_binning:
-        Ndof = Ndatapoints - Nparameters - 1
-    else:
-        Ndof = Ndatapoints - Nparameters
-    chi2 = fitting_object.fval
-    prop = stats.chi2.sf(chi2, Ndof)
-    return Ndof, chi2, prop
+    # Initialize structure factor
+    sf_arr = None
 
-def do_chi2_fit(fit_function, x, y, dy, parameter_guesses, verbose = True):
+    for i, defects in enumerate(top_defect_list):
 
-    chi2_object = Chi2Regression(fit_function, x, y, dy)
-    fit = Minuit(chi2_object, *parameter_guesses)
-    fit.errordef = Minuit.LEAST_SQUARES
+        # Get defect array for frame
+        defect_positions = get_defect_arr_from_frame(defects)
 
-    if verbose:
-        print(fit.migrad())
-    else:
-        fit.migrad()
-    return fit
+        if defect_positions is None:
+            continue
 
-def generate_dictionary(fitting_object, Ndatapoints, chi2_fit = True, chi2_suffix = None, subtract_1dof_for_binning = False):
+        # Initialize point pattern
+        point_pattern = PointPattern(defect_positions, box_window)
 
-    Nparameters = len(fitting_object.values[:])
-    if chi2_suffix is None:
-        chi2_suffix = ''
-    else:
-        chi2_suffix = f'({chi2_suffix})'
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            sf = StructureFactor(point_pattern)
+            k, sf_estimated = sf.scattering_intensity(k_max=kmax, debiased=debiased, direct=direct)
+            pcf_estimated = pcf.estimate(point_pattern, method=corr_func_method, \
+                                 Kest=dict(rmax=rmax), fv=method_kwargs)
+
+        # Bin data
+        knorms = np.linalg.norm(k, axis=1)
+        kbins, smeans, sstds = bin_data(knorms, sf_estimated, bins=nbins,)
+
+        # Store results
+        if sf_arr is None:
+            kbins_arr = kbins.astype('float')
+            rad_arr = pcf_estimated.r.values
+
+            sf_arr = np.zeros([Nframes, len(kbins_arr), 2]) * np.nan
+            pcf_arr = np.zeros([Nframes, len(rad_arr)]) * np.nan
    
-    dictionary = {f'{chi2_suffix} Npoints': Ndatapoints}
+        sf_arr[i, :, 0] = smeans
+        sf_arr[i, :, 1] = sstds
+        pcf_arr[i] = pcf_estimated.pcf
+
+    return kbins_arr, sf_arr, rad_arr, pcf_arr
 
 
-    for i in range(Nparameters):
-        dict_new = {f'{chi2_suffix} {fitting_object.parameters[i]}': [fitting_object.values[i], fitting_object.errors[i]]}
-        dictionary.update(dict_new)
-    if subtract_1dof_for_binning:
-        Ndof = Ndatapoints - Nparameters - 1
-    else:
-        Ndof = Ndatapoints - Nparameters
-
-    dictionary.update({f'{chi2_suffix} Ndof': Ndof})
-
-    if chi2_fit:
-        chi2 = fitting_object.fval
-        p = stats.chi2.sf(chi2, Ndof)   
-        dictionary.update({f'{chi2_suffix} chi2': chi2, f'{chi2_suffix} pval': p})
-
-    return dictionary
-
-def runstest(residuals):
-   
-    N = len(residuals)
-
-    indices_above = np.argwhere(residuals > 0.0).flatten()
-    N_above = len(indices_above)
-    N_below = N - N_above
-
-    print(N_above)
-    print("bel", N_below)
-    # calculate no. of runs
-    runs = 1
-    for i in range(1, len(residuals)):
-        if np.sign(residuals[i]) != np.sign(residuals[i-1]):
-            runs += 1
-
-    # calculate expected number of runs assuming the two samples are drawn from the same distribution
-    runs_expected = 1 + 2 * N_above * N_below / N
-    runs_expected_err = np.sqrt((2 * N_above * N_below) * (2 * N_above * N_below - N) / (N ** 2 * (N-1)))
-
-    # calc test statistic
-    test_statistic = (runs - runs_expected) / runs_expected_err
-
-    print("Expected runs and std: ", runs_expected, " ", runs_expected_err)
-    print("Actual no. of runs: ", runs)
-    # use t or z depending on sample size (2 sided so x2)
-    if N < 50:
-        p_val = 2 * stats.t.sf(np.abs(test_statistic), df = N - 2)
-    else:
-        p_val = 2 * stats.norm.sf(np.abs(test_statistic))
-
-    return test_statistic, p_val
-
-def calc_weighted_mean(x, dx, axis = -1):
-    """
-    returns: weighted mean, error on mean,
-    """
-    assert(len(x) > 1)
-    assert(len(x) == len(dx))
-    
-    var = 1 / np.sum(1 / dx ** 2, axis = axis)
-    mean = np.sum(x / dx ** 2, axis = axis) * var
-
-    return mean, np.sqrt(var)
-
-def calc_weighted_mean_vec(x, dx):
-    """
-    returns: weighted mean, error on mean, Ndof, Chi2, p_val
-    """
-    assert(len(x) > 1)
-    assert(len(x) == len(dx))
-    
-    var = 1 / np.sum(1 / dx ** 2)
-    mean = np.sum(x / dx ** 2) * var
-
-    # Calculate statistics
-    Ndof = len(x) - 1
-    chi2 = np.sum((x - mean) ** 2 / dx ** 2)
-    p_val = stats.chi2.sf(chi2, Ndof)
-
-    return mean, np.sqrt(var), Ndof, chi2, p_val
-
-def calc_corr_matrix(x):
-    """assuming that each column of x represents a separate variable"""
-   
-    data = x.astype('float')
-    rows, cols = data.shape
-    corr_matrix = np.empty([cols, cols])
+def est_stationarity(time_series, interval_len, Njump, Nconverged, max_sigma_dist = 2):
  
-    for i in range(cols):
-        for j in range(i, cols):
-                corr_matrix[i,j] = (np.mean(data[:,i] * data[:,j]) - data[:,i].mean() * data[:,j].mean()) / (data[:,i].std(ddof = 0) * data[:,j].std(ddof = 0))
+    # Estimate the stationarity of a time series by calculating the mean and standard deviation
+    # of the time series in intervals of length interval_len. If the mean of a block is sufficiently
+    # close to the mean of the entire time series, then the block is considered stationary.
 
-        corr_matrix[j,i] = corr_matrix[i,j]
-    return corr_matrix
+    Nframes = len(time_series)
+    Nblocks = int(Nframes / interval_len)
+    converged_mean = np.mean(time_series[Nconverged:])
+    global_std = np.std(time_series[Nconverged:], ddof = 1)
 
-def prop_err(dzdx, dzdy, x, y, dx, dy, correlation = 0):
-    """ derivatives must takes arguments (x,y)
+    it = 0
+    while it * Njump < Nframes - interval_len:
+        mean_block = np.mean(time_series[it * Njump: it * Njump + interval_len])
+        dist_from_mean = np.abs(mean_block - converged_mean) / global_std
+
+        if np.abs(mean_block - converged_mean) > max_sigma_dist * global_std:
+            it += 1
+        else:
+            return it * Njump, True
+    return it * Njump, False
+
+def gen_status_txt(message = '', log_path = None):
     """
-    var_from_x = dzdx(x,y) ** 2 * dx ** 2
-    var_from_y = dzdy (x, y) ** 2 * dy ** 2
-    interaction = 2 * correlation * dzdx(x, y) * dzdy (x, y) * dx * dy
+    Generate txt file with message and no.
+    """
+    with open(log_path, 'w') as f:
+        f.write(message)
+    return
 
-    prop_err = np.sqrt(var_from_x + var_from_y + interaction)
-
-    if correlation == 0:
-        return prop_err, np.sqrt(var_from_x), np.sqrt(var_from_y)
+def get_windows(Nwindows, min_window_size, max_window_size, logspace = False):
+    """
+    Get window sizes
+    """
+    if logspace:
+        window_sizes = np.logspace(np.log10(min_window_size), np.log10(max_window_size), Nwindows)
     else:
-        return prop_err
+        window_sizes = np.linspace(min_window_size, max_window_size, Nwindows)
+    return window_sizes
 
-def do_adf_test(time_series, maxlag = None, autolag = 'AIC', regression = 'c', verbose = True):
-    """
-    Performs the augmented Dickey-Fuller test on a time series.
-    """
-    result = adfuller(time_series, maxlag = maxlag, autolag = autolag, regression = regression)
-    if verbose:
-        print(f'ADF Statistic: {result[0]}')
-        print(f'p-value: {result[1]}')
-        print(f'nobs used: {result[3]}')
-        print(f'lags used: {result[2]}')
-        print(f'Critical Values:')
-        
-        for key, value in result[4].items():
-            print(f'\t{key}: {value}')
 
-    return result
+### MAIN ---------------------------------------------------------------------------------------
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input_folder', type=str)
+    parser.add_argument('--output_folder', type=str)
+    parser.add_argument('--mode', type=int)
+    args = parser.parse_args()
+
+    mode = args.mode
+    folder_path = args.input_folder
+    output_path = args.output_folder
+    archive_path = os.path.join(folder_path)
+
+    if mode == "sfac":
+        calc_sfac = True
+        calc_dens = False
+    elif mode == "dens":
+        calc_dens = True
+        calc_sfac = False
+    else:
+        calc_sfac = True
+        calc_dens = True
+
+    exp = int(output_path.split('_')[-1])
+    act = float(output_path.split('_')[-3])
+
+    t1 = time.time()
+    msg = f"\nAnalyzing experiment {exp} and activity {act}"
+    print(msg)
+
+    # Load data archive
+    ar = mp.archive.loadarchive(archive_path)
+    LX, LY = ar.__dict__['LX'], ar.__dict__['LY']
+
+    if not act == ar.__dict__['zeta']:
+        err_msg = f"Activity list and zeta in archive do not match for experiment {exp}. Exiting..."
+        print(err_msg)
+        raise ValueError(err_msg)
+    
+    # Get defect list
+    top_defects = get_defect_list(ar, LX, LY,)
+
+    if calc_sfac:
+        # Define paths 
+        sfac_path = os.path.join(output_path, f'structure_factor_act{act}_exp{exp}.npy')
+        kbins_path = os.path.join(output_path, f'kbins.txt')
+        rad_path = os.path.join(output_path, f'rad.txt')
+        pcf_path = os.path.join(output_path, f'pcf.txt')
+   
+        print(f"Calculating structure factor for experiment {exp} and activity {act}")
+
+        # Define box window
+        box_window = BoxWindow(bounds=[[0, LX], [0, LY]])  
+        kmax = 256 / LX
+
+        # Get structure factor
+        kbins, sfac, rad_arr, pcf_arr = get_structure_factor(top_defects, box_window, kmax = kmax, debiased = True, direct = True, nbins = 50,\
+                                                             corr_func_method = "fv", method_kwargs = dict(method="b", spar=0.2, nknots = 40), rmax = 10)
+
+        # Save structure factor
+        np.save(sfac_path, sfac)
+        np.savetxt(kbins_path, kbins)
+        np.savetxt(rad_path, rad_arr)
+        np.savetxt(pcf_path, pcf_arr)
+
+        t2 = time.time()
+        msg = f"Time to analyze experiment {exp} and activity {act}: {np.round(t2-t1,2)} s"
+        print(msg)
+
+        gen_status_txt(msg, os.path.join(output_path, 'sfac_analysis_completed.txt'))
+
+    if calc_dens:
+        # Define paths 
+        av_defects_path = os.path.join(output_path, f'Ndefects_act{act}_exp{exp}.txt')
+        var_counts_path = os.path.join(output_path, f'count_fluctuations_act{act}_exp{exp}.txt')
+        av_counts_path = os.path.join(output_path, f'av_counts_act{act}_exp{exp}.txt')
+        window_sizes_path = os.path.join(output_path, f'window_sizes.txt')
+        model_params_path = os.path.join(output_path, f'model_params.pkl')
+
+        print(f"Calculating defect densities for experiment {exp} and activity {act}")
+
+        # Define window sizes as fraction of system size
+        Nwindows = 30
+        min_window_size_fraction = 0.1 / 20
+        max_window_size_fraction = 0.1
+        logspace = True
+        window_sizes = get_windows(Nwindows, min_window_size_fraction * LX, max_window_size_fraction * LX, logspace = logspace)
+
+        if exp == 0:
+            np.savetxt(window_sizes_path, window_sizes)
+            model_params = ar.__dict__.copy()
+            # save model_params
+            with open(model_params_path, 'wb') as fp:
+                pickle.dump(model_params, fp)
+
+
+        # Get total no. of defects
+        dens_defects = get_defect_density(top_defects, area = 1, save = True, save_path = av_defects_path)
+
+        if check_for_convergence:
+            idx_first_frame, converged = est_stationarity(dens_defects, interval_len = 10, Njump = 15, Nconverged = 100, max_sigma_dist=2)
+            print(f"Av. no. of defects CONVERGED after {idx_first_frame} frames \n")
+            if not converged:
+                print("Experiment ", exp, " act. ", act, " did not converge")
+        else:
+            idx_first_frame = 0
+
+        # Get count fluctuations and average counts for each frame
+        boundaries = [[0, LX], [0, LY]]
+        _, _ = get_density_fluctuations(top_defects[idx_first_frame:], window_sizes, boundaries = boundaries, N_center_points= None, Ndof=1, \
+                                        save = True, save_path_av_counts=av_counts_path, save_path_var_counts=var_counts_path)
+
+        t2 = time.time()
+        msg = f"Time to analyze experiment {exp} and activity {act}: {np.round(t2-t1,2)} s"
+        print(msg)
+
+        gen_status_txt(msg, os.path.join(output_path, 'dens_analysis_completed.txt'))
+
+
+if __name__ == '__main__':
+    main()
