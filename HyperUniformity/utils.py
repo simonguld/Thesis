@@ -6,6 +6,7 @@ import os
 import sys
 import warnings
 import time
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -23,6 +24,31 @@ sys.path.append('C:\\Users\\Simon Andersen\\Projects\\Projects\\Appstat2022\\Ext
 from ExternalFunctions import Chi2Regression, BinnedLH, UnbinnedLH
 from ExternalFunctions import nice_string_output, add_text_to_ax    # Useful functions to print fit results on figure
 
+
+# Helper functions -------------------------------------------------------------------
+
+def move_files(old_path, new_path = None):
+    if new_path is None:
+        new_path = old_path.replace('_sfac', '')
+    act_dirs = os.listdir(old_path)
+
+    for i, dir in enumerate(act_dirs):
+        act_dir_new = os.path.join(new_path, dir)
+        act_dir_old = os.path.join(old_path, dir)
+
+        exp_dirs = os.listdir(act_dir_old)
+
+        for j, exp_dir in enumerate(exp_dirs):
+            act_exp_dir_new = os.path.join(act_dir_new, exp_dir)
+            act_exp_dir_old = os.path.join(act_dir_old, exp_dir)
+
+            for file in os.listdir(act_exp_dir_old):
+                src_path = os.path.join(act_exp_dir_old, file)
+                dest_path = os.path.join(act_exp_dir_new, file)
+
+                if os.path.isfile(src_path):
+                    shutil.copy2(src_path, dest_path)
+    return
 
 # Functions for nematic analysis  -----------------------------------------------------
 

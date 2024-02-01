@@ -13,17 +13,14 @@ import time
 import argparse
 
 import numpy as np
-from sklearn.neighbors import KDTree, radius_neighbors_graph
-from sympy import rad
+from sklearn.neighbors import KDTree
 
 sys.path.append('/groups/astro/kpr279/')
 sys.path.append('/groups/astro/kpr279/.local/lib/python3.8/site-packages/')
 
 from structure_factor.point_pattern import PointPattern
-from structure_factor.spatial_windows import BoxWindow, BallWindow
-from structure_factor.hyperuniformity import bin_data, hyperuniformity_class
-from structure_factor.data import load_data
-from structure_factor.point_processes import GinibrePointProcess
+from structure_factor.spatial_windows import BoxWindow
+from structure_factor.hyperuniformity import bin_data
 from structure_factor.structure_factor import StructureFactor
 import structure_factor.pair_correlation_function as pcf
 
