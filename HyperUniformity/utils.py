@@ -390,28 +390,45 @@ def calc_weighted_mean(x, dx, axis = -1):
     """
     returns: weighted mean, error on mean,
     """
-    assert(len(x) > 1)
-    assert(len(x) == len(dx))
+    if not len(x) > 1:
+        print('Length of x must be greater than 1')
+        return
+    if not len(x) == len(dx):
+        print('Length of x and dx must be equal')
+        return
     
-    var = 1 / np.sum(1 / dx ** 2, axis = axis)
-    mean = np.sum(x / dx ** 2, axis = axis) * var
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        var = 1 / np.nansum(1 / dx ** 2, axis = axis)
+        mean = np.nansum(x / dx ** 2, axis = axis) * var
 
     return mean, np.sqrt(var)
 
-def calc_weighted_mean_vec(x, dx):
+def calc_weighted_mean_vec(x, dx, replace_null_uncertainties = True):
     """
-    returns: weighted mean, error on mean, Ndof, Chi2, p_val
+    returns: weighted mean, error on mean,
     """
-    assert(len(x) > 1)
-    assert(len(x) == len(dx))
-    
-    var = 1 / np.sum(1 / dx ** 2)
-    mean = np.sum(x / dx ** 2) * var
+  
+    if not len(x) > 1:
+        print('Length of x must be greater than 1')
+        return
+    if not len(x) == len(dx):
+        print('Length of x and dx must be equal')
+        return
 
-    # Calculate statistics
-    Ndof = len(x) - 1
-    chi2 = np.sum((x - mean) ** 2 / dx ** 2)
-    p_val = stats.chi2.sf(chi2, Ndof)
+    if replace_null_uncertainties:
+          dx[dx == 0] = np.nanmean(dx[dx != 0])
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        var_vec_inv = (1 / dx ** 2)
+        var = 1 / np.nansum(var_vec_inv)
+        mean = np.nansum(x / dx ** 2,) * var
+
+        # Calculate statistics
+        Ndof = len(x) - 1
+        chi2 = np.nansum((x - mean) ** 2 / dx ** 2)
+        p_val = stats.chi2.sf(chi2, Ndof)
 
     return mean, np.sqrt(var), Ndof, chi2, p_val
 

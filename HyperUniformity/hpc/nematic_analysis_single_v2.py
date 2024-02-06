@@ -4,7 +4,6 @@
 ### SETUP ------------------------------------------------------------------------------------
 
 ## Imports:
-from calendar import c
 import os
 import sys
 import pickle
