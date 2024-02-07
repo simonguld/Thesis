@@ -126,10 +126,16 @@ class AnalyseDefects:
             except:
                 self.conv_list.append([0] * self.Nactivity[i])
 
-    def __calc_binder(self, Ndataset = 0):
+    def __calc_binder(self, Ndataset = 0, center = False):
+
+        suffix = '_centered' if center else '' 
 
         defect_arr = self.get_arrays_full(Ndataset=Ndataset)[0]
 
+        if center:
+            av_defects = self.get_arrays_av(Ndataset=Ndataset)[-1]
+            defect_arr = defect_arr - av_defects[:,0][None, :, None]
+ 
         act_list = self.act_list[Ndataset]
         conv_list = self.conv_list[Ndataset]
         Nact = len(act_list)
