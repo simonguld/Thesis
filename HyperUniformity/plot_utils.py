@@ -4,39 +4,13 @@
 ### SETUP ------------------------------------------------------------------------------------
 
 ## Imports:
-import os
-import sys
-import pickle
-import warnings
-import time
-import logging
-import glob
-import shutil
 
 import numpy as np
 import matplotlib.pyplot as plt
-from iminuit import Minuit
+
+plt.style.use('sg_article')
 
 from utils import *
-
-import seaborn as sns
-from matplotlib import rcParams
-from cycler import cycler
-
-## Set plotting style and print options
-sns.set_theme()
-sns.set_style("darkgrid")
-sns.set_context("paper") #Possible are paper, notebook, talk and poster
-
-d = {'lines.linewidth': 2, 'axes.titlesize': 18, 'axes.labelsize': 18, 'xtick.labelsize': 12, 'axes.labelweight': 'bold', 'ytick.labelsize': 12,\
-     'legend.fontsize': 15, 'font.family': 'serif', 'font.weight': 'bold', 'figure.titlesize': 20,'figure.titleweight': 'bold',\
-          'figure.labelsize': 18,'figure.labelweight': 'bold', 'figure.figsize': (9,6), }
-d_colors = {'axes.prop_cycle': cycler(color = ['teal', 'navy', 'coral', 'plum', 'purple', 'olivedrab',\
-         'black', 'red', 'cyan', 'yellow', 'khaki','lightblue'])}
-rcParams.update(d)
-rcParams.update(d_colors)
-np.set_printoptions(precision = 5, suppress=1e-10)
-
 
 
 ### FUNCTIONS ----------------------------------------------------------------------------------

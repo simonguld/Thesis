@@ -8,33 +8,11 @@ import os
 import warnings
 
 import numpy as np
-
 import matplotlib.pyplot as plt
-import seaborn as sns
-from matplotlib import rcParams, ticker
-from cycler import cycler
+from matplotlib import ticker
 
 from utils import *
 from plot_utils import *
-
-if 0:
-    ## Change directory to current one
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    os.chdir(dir_path)
-
-    ## Set plotting style and print options
-    sns.set_theme()
-    sns.set_style("darkgrid")
-    sns.set_context("paper") #Possible are paper, notebook, talk and poster
-
-    d = {'lines.linewidth': 2, 'axes.titlesize': 18, 'axes.labelsize': 18, 'xtick.labelsize': 12, 'axes.labelweight': 'bold', 'ytick.labelsize': 12,\
-        'legend.fontsize': 15, 'font.family': 'serif', 'font.weight': 'bold', 'figure.titlesize': 20,'figure.titleweight': 'bold',\
-            'figure.labelsize': 18,'figure.labelweight': 'bold', 'figure.figsize': (9,6), }
-    d_colors = {'axes.prop_cycle': cycler(color = ['teal', 'navy', 'coral', 'plum', 'purple', 'olivedrab',\
-            'black', 'red', 'cyan', 'yellow', 'khaki','lightblue'])}
-    rcParams.update(d)
-    rcParams.update(d_colors)
-    np.set_printoptions(precision = 5, suppress=1e-10)
 
 
 
@@ -167,6 +145,35 @@ class AnalyseDefects:
 
         return binder_cumulants
 
+    def calc_sus_binder(self, Ndataset = 0, order_param = None, Nscale = True, save = False):
+
+
+        act_list = self.act_list[Ndataset]
+        conv_list = self.conv_list[Ndataset]
+        output_path = self.output_paths[Ndataset]
+       
+        if order_param is None:
+            order_param = self.get_arrays_full(Ndataset = Ndataset)[0]
+        av_def = self.get_arrays_av(Ndataset = Ndataset)[-1]
+
+        sus = np.zeros(len(act_list)) * np.nan
+        binder = np.zeros(len(act_list)) * np.nan
+   
+        for i, act in enumerate(act_list):
+            sus[i] = np.nanmean(order_param[conv_list[i]:, i, :] ** 2) - np.nanmean(order_param[conv_list[i]:, i, :]) ** 2
+            binder[i] = np.nanmean((order_param[conv_list[i]:, i, :])**4) \
+                / (3 * np.nanmean((order_param[conv_list[i]:, i, :])**2) ** 2)
+
+        binder = 1 - binder
+        if Nscale:
+            sus[:] *= av_def[:, 0]
+
+        if save:
+            np.save(os.path.join(output_path, 'susceptibility.npy'), sus)
+            np.save(os.path.join(output_path, 'binder_cumulants.npy'), binder)
+
+        return sus, binder
+
     def extract_results(self, save = True, normalize = True,):
         """
         Analyse the defects for all the input folders
@@ -243,10 +250,7 @@ class AnalyseDefects:
         for N in Ndataset_list:
             while True:
                 try:
-                    defect_arr = np.load(os.path.join(self.output_paths[N], 'defect_arr.npy'))
-                    av_counts = np.load(os.path.join(self.output_paths[N], 'av_counts.npy'))
-                    var_counts = np.load(os.path.join(self.output_paths[N], 'var_counts.npy'))
-                    dens_fluc = np.load(os.path.join(self.output_paths[N], 'dens_fluc.npy'))
+                    defect_arr, var_counts, dens_fluc, av_counts = self.get_arrays_full(N)
                     break
                 except:
                     print('Defect array not found. They will be extracted now using normalize = True')
@@ -698,7 +702,7 @@ class AnalyseDefects:
         except:
             print('Average defects not found. Analyse defects first.')
             return
-        print(av_defects)
+        
         fig, ax = plt.subplots(figsize=(9, 6))
         ax.errorbar(self.act_list[Ndataset], av_defects[:, 0], yerr = av_defects[:, 1], fmt = 'k.', elinewidth=1.5, capsize=1.5, capthick=1, markersize = 4)
         
@@ -797,11 +801,12 @@ class AnalyseDefects:
 
             ncols = 4
             nrows = int(np.ceil(self.Nexp[Ndataset] / ncols))
+            height = nrows * 3
             norm = self.LX[Ndataset] ** 2 if plot_density else 1
             title = 'Defect density' if plot_density else 'Defect count'
 
             for i, act in enumerate(activities):
-                fig, ax = plt.subplots(nrows = nrows, ncols = ncols, figsize=(22,13))
+                fig, ax = plt.subplots(nrows = nrows, ncols = ncols, figsize=(16, height))
                 ax = ax.flatten()  
                 defect_arr_act = (defect_arr[:, i, :] / norm).astype(float)
                 mini, maxi = np.nanmin(defect_arr_act) * 0.3, np.nanmax(defect_arr_act) * 1.5
