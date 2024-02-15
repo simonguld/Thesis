@@ -145,7 +145,7 @@ class AnalyseDefects:
 
         return binder_cumulants
 
-    def calc_sus_binder(self, Ndataset = 0, order_param = None, Nscale = True, save = False):
+    def calc_sus_binder(self, Ndataset = 0, order_param = None, Nscale = True, Npower = 1, save = False):
 
 
         act_list = self.act_list[Ndataset]
@@ -166,7 +166,7 @@ class AnalyseDefects:
 
         binder = 1 - binder
         if Nscale:
-            sus[:] *= av_def[:, 0]
+            sus[:] *= av_def[:, 0] ** Npower
 
         if save:
             np.save(os.path.join(output_path, 'susceptibility.npy'), sus)
@@ -401,8 +401,11 @@ class AnalyseDefects:
             av_counts_std[:, :, act_idx_list] = np.load(os.path.join(self.output_paths[N], 'av_counts_std.npy'))[-Nbase_frames:]
 
             av_defects[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'av_defects.npy'))
-            susceptibility[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
-            binder_cumulants[act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'binder_cumulants.npy'))
+
+            #susceptibility[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
+            #binder_cumulants[act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'binder_cumulants.npy'))
+            susceptibility[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
+            binder_cumulants[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'binder_cumulants.npy'))
 
             if ext_sfac:
                 try:
