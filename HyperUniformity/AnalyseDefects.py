@@ -402,24 +402,19 @@ class AnalyseDefects:
 
             av_defects[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'av_defects.npy'))
 
-            #susceptibility[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
-            #binder_cumulants[act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'binder_cumulants.npy'))
-            susceptibility[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
-            binder_cumulants[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'binder_cumulants.npy'))
-
+            susceptibility[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
+            binder_cumulants[act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'binder_cumulants.npy'))
+      
             if ext_sfac:
-                try:
-                    sfac_av[:, :, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'sfac_av.npy'))[-Nbase_frames:]
-                    sfac_av_unweighted[:, :, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'sfac_av_unweighted.npy'))[-Nbase_frames:]
-                    sfac_time_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'sfac_time_av.npy'))[-Nbase_frames:]
-                    sfac_time_av_unweighted[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'sfac_time_av_unweighted.npy'))[-Nbase_frames:]
-                except:
-                    pass
-                try:
-                    pcf_av[:, :, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'pcf_av.npy'))[-Nbase_frames:]
-                    pcf_time_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'pcf_time_av.npy'))[-Nbase_frames:]
-                except:
-                    pass
+      
+                sfac_av[:, :, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'sfac_av.npy'))[-Nbase_frames:]
+                sfac_av_unweighted[:, :, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'sfac_av_unweighted.npy'))[-Nbase_frames:]
+                sfac_time_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'sfac_time_av.npy'))[:]
+                sfac_time_av_unweighted[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'sfac_time_av_unweighted.npy'))[:]
+
+                pcf_av[:, :, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'pcf_av.npy'))[-Nbase_frames:]
+                pcf_time_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'pcf_time_av.npy'))[:]
+         
             
         if save:
             np.save(os.path.join(save_path, 'activity_list.npy'), self.act_list[Nbase])
@@ -447,6 +442,44 @@ class AnalyseDefects:
                 np.savetxt(os.path.join(save_path, 'rad.txt'), rad)
         return
     
+    def merge_sus_binder(self, save_path = None, save = True):
+
+        if save_path is None:
+            save_path = os.path.join(self.output_main_path, 'merged_results')
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+
+        Nbase = np.argmin(self.priorities)
+        Nbase_frames = self.Nframes[Nbase]
+        window_sizes = self.window_sizes[Nbase]
+
+        try:
+            susceptibility = np.load(os.path.join(self.output_paths[Nbase], 'susceptibility.npy'))
+            binder_cumulants = np.load(os.path.join(self.output_paths[Nbase], 'binder_cumulants.npy'))
+        except:
+            print('Base dataset not found. Analyse defects first.')
+            return
+        
+        # overwrite the activities with the ones from the other datasets according to self.priorities
+        _, Nsorted = zip(*sorted(zip(self.priorities, range(self.Ndata))))
+
+        for N in Nsorted[1:]:
+            act_idx_list = []
+            for act in self.act_list[N]:
+                act_idx_list.append(self.act_list[Nbase].index(act))
+
+            #susceptibility[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
+            #binder_cumulants[act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'binder_cumulants.npy'))
+            susceptibility[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
+            binder_cumulants[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'binder_cumulants.npy'))
+            
+        if save:
+            np.save(os.path.join(save_path, 'susceptibility.npy'), susceptibility)
+            np.save(os.path.join(save_path, 'binder_cumulants.npy'), binder_cumulants)
+
+        return
+    
+
     def analyze_hyperuniformity(self, Ndataset = 0, fit_densities = False, fit_dict = {}, window_idx_bounds = None, \
                                 act_idx_bounds = None, weighted_mean = False, use_merged = False, save = True, plot = True):
         
