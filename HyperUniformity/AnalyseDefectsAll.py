@@ -53,6 +53,10 @@ class AnalyseDefectsAll:
         return act_list, av_defects[act_idx_bounds[0]:act_idx_bounds[1]]
 
     def get_binder_susceptibility(self, LX = 512, act_idx_bounds = None,):
+        """
+        returns binder, susceptibility 
+        
+        """
 
         idx = self.LX.index(LX)
         inputs_path = self.inputs_paths[idx]
