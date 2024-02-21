@@ -217,7 +217,6 @@ class AnalyseDefects:
 
         return binder_cumulants
 
-
     def calc_binder_susceptibility(self, Ndataset = 0, order_param_func = None, Nscale = True, return_order_param = False, save = True):
 
         act_list = self.act_list[Ndataset]
@@ -464,8 +463,8 @@ class AnalyseDefects:
        
                 av_defects = np.zeros((self.Nactivity[N], 2))        
                 for i, act in enumerate(self.act_list[N]):
-                    av_defects[i, 0] = np.mean(defect_arr[self.conv_list[N][i]:, i, :])
-                    av_defects[i, 1] = np.std(defect_arr[self.conv_list[N][i]:, i, :]) / np.sqrt(defect_arr[self.conv_list[N][i]:, i, :].size)     
+                    av_defects[i, 0] = np.nanmean(defect_arr[self.conv_list[N][i]:, i, :])
+                    av_defects[i, 1] = np.nanstd(defect_arr[self.conv_list[N][i]:, i, :]) / np.sqrt(defect_arr[self.conv_list[N][i]:, i, :].size)     
                 if save:
                     np.save(os.path.join(self.output_paths[N], 'av_defects.npy'), av_defects)
 
@@ -480,7 +479,6 @@ class AnalyseDefects:
                     self.analyze_sfac(N, plot = False, weighted = weighted, **sfac_dict)
                     self.analyze_sfac_time_av(N, plot = False, weighted = weighted, **sfac_dict)
         return
-
 
     def merge_results(self, save_path = None, mode = 'dens', save = True):
 

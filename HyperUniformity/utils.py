@@ -458,6 +458,7 @@ def prop_err(dzdx, dzdy, x, y, dx, dy, correlation = 0):
         return prop_err
 
 def do_adf_test(time_series, maxlag = None, autolag = 'AIC', regression = 'c', verbose = True):
+
     """
     Performs the augmented Dickey-Fuller test on a time series.
     """
@@ -473,3 +474,24 @@ def do_adf_test(time_series, maxlag = None, autolag = 'AIC', regression = 'c', v
             print(f'\t{key}: {value}')
 
     return result
+
+
+def generate_moments(order_param, LX, conv_list):
+
+    moments = np.nan * np.zeros((4, order_param.shape[1]))
+
+    for i in range(order_param.shape[1]):
+
+        cum1 = stats.kstat(order_param[conv_list[i]:, i, :], n = 1, axis = None, nan_policy = 'omit')
+        cum2 = stats.kstat(order_param[conv_list[i]:, i, :], n = 2, axis = None, nan_policy = 'omit')
+        cum3 = stats.kstat(order_param[conv_list[i]:, i, :], n = 3, axis = None, nan_policy = 'omit')
+        cum4 = stats.kstat(order_param[conv_list[i]:, i, :], n = 4, axis = None, nan_policy = 'omit')
+
+        moments[0, i] = cum1 * LX
+        moments[1, i] = cum2 * LX + cum1 ** 2 * LX ** 2
+        moments[2, i] = cum3 * LX + 3 * cum1 * cum2 * LX ** 2 + cum1 ** 3 * LX ** 3
+        moments[3, i] = cum4 * LX + (3 * cum2 ** 2 + 4 * cum1 * cum3) * LX ** 2 + 6 * cum1 ** 2 * cum2 * LX ** 3 + cum1 ** 4 * LX ** 4
+
+    return moments
+
+

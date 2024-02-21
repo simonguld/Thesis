@@ -58,7 +58,7 @@ def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False
 def main():
     do_extraction = False
     do_basic_analysis = True
-    do_hyperuniformity_analysis = True
+    do_hyperuniformity_analysis = False
     do_merge = True
 
     system_size_list = [256, 512, 1024, 2048]
@@ -79,7 +79,7 @@ def main():
 
     
     for LL in system_size_list:
-        print('Starting analysis for L =', LL)
+        print('\nStarting analysis for L =', LL)
         time0 = time.time()
         output_path = f'data\\nematic_analysis{LL}_LL0.05'
         
@@ -104,7 +104,7 @@ def main():
         if do_merge:
             ad.merge_results()
 
-        print(f'Analysis for L = {LL} done in {time.time() - time0:.2f} s.\n')
+        print(f'Analysis for L = {LL} done in {time.time() - time0:.2f} s.\n\n')
 
 if __name__ == "__main__":
     main()
