@@ -49,6 +49,19 @@ def move_files(old_path, new_path = None):
 
 # Functions for nematic analysis  -----------------------------------------------------
 
+def get_frame_number(idx, path, ninfo):
+    """
+    Assuming equal spacing between frames, get the frame number from the index
+    """
+    frame_list = []
+    for f in os.listdir(path):
+        if f.startswith('frame'):
+            frame_list.append(int(f.split('.')[0].split('frame')[-1]))
+    frame_list.sort()
+    frame_interval = frame_list[1]-frame_list[0]
+
+    return int(frame_interval / ninfo) * idx
+
 def get_dir(Qxx, Qyx, return_S=False):
     """
     This function has been provided by Lasse Frederik Bonn:
