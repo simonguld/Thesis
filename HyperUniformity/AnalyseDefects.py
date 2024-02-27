@@ -1409,7 +1409,7 @@ class AnalyseDefects:
             ax[i].set_xscale('log')
             ax[i].set_yscale('log')
 
-            ax[i].set_xticks([kmin, 0.1, kmax], [np.round(kmin,2), 0.1, np.round(kmax,1)])
+            ax[i].set_xticks([kmin, 0.1, kmax], [np.round(kmin,3), 0.1, np.round(kmax,1)])
             ax[i].set_yticks([0.3, 0.4, 0.6, 1], [0.3, 0.4, 0.6, 1])
 
         fig.suptitle(fr'Time av. structure factor different activities (L = {self.LX[Ndataset]})', y=1.03)
