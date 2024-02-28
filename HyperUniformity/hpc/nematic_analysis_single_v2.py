@@ -413,6 +413,11 @@ def main():
     # Get defect list
     top_defects = get_defect_list(ar, LX, LY,)
 
+    t2 = time.time()
+    msg = f"Time to extract defects for experiment {exp} and activity {act}: {np.round(t2-t1,2)} s"
+    print(msg)
+
+
     if calc_sfac:
         # Define paths 
         sfac_path = os.path.join(output_path, f'structure_factor_act{act}_exp{exp}.npy')
@@ -436,8 +441,8 @@ def main():
         np.savetxt(rad_path, rad_arr)
         np.savetxt(pcf_path, pcf_arr)
 
-        t2 = time.time()
-        msg = f"Time to analyze experiment {exp} and activity {act}: {np.round(t2-t1,2)} s"
+        t3 = time.time()
+        msg = f"Time to analyze experiment {exp} and activity {act}: {np.round(t3-t2,2)} s"
         print(msg)
 
         gen_status_txt(msg, os.path.join(output_path, 'sfac_analysis_completed.txt'))
@@ -483,8 +488,8 @@ def main():
         _, _ = get_density_fluctuations(top_defects[idx_first_frame:], window_sizes, boundaries = boundaries, N_center_points= None, Ndof=1, \
                                         save = True, save_path_av_counts=av_counts_path, save_path_var_counts=var_counts_path)
 
-        t2 = time.time()
-        msg = f"Time to analyze experiment {exp} and activity {act}: {np.round(t2-t1,2)} s"
+        t4 = time.time()
+        msg = f"Time to analyze experiment {exp} and activity {act}: {np.round(t4-t3,2)} s"
         print(msg)
 
         gen_status_txt(msg, os.path.join(output_path, 'dens_analysis_completed.txt'))
