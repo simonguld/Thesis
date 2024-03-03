@@ -7,6 +7,9 @@ import sys
 import warnings
 import time
 import shutil
+import io
+import lz4
+import json
 
 import numpy as np
 from iminuit import Minuit
@@ -47,6 +50,176 @@ def move_files(old_path, new_path = None):
                     shutil.copy2(src_path, dest_path)
     return
 
+def compress_file(input_file, output_file):
+    # Open the input file in binary mode for reading
+    with open(input_file, 'rb') as f_in:
+        # Read the data from the input file
+        data = f_in.read()
+
+        # Compress the data using lz4 compression
+        compressed_data = lz4.frame.compress(data)
+
+        # Write the compressed data to the output file
+        with open(output_file, 'wb') as f_out:
+            f_out.write(compressed_data)
+    return
+
+def print_size(input_file, output_file):
+    # Get the size of the input file
+    input_size = os.path.getsize(input_file)
+
+    # Get the size of the output file
+    output_size = os.path.getsize(output_file)
+
+    # Print the size of the input and output files
+    print(f'Input file size: {input_size / 1024 ** 2:.2f} MB')
+    print(f'Output file size: {output_size / 1024 ** 2:.2f} MB')
+
+    # Calculate the compression ratio
+    ratio = input_size / output_size
+    print(f'Compression ratio: {ratio:.2f}x')
+    return
+
+def estimate_size_reduction(input_file, output_file, Nframes = 1, verbose=True):
+    # Get the size of the input file
+    input_size = os.path.getsize(input_file)
+
+    # Get the size of the output file
+    output_size = os.path.getsize(output_file)
+
+    # Calculate the compression ratio
+    ratio = input_size / output_size
+
+    if verbose:
+        print(f'Uncompressed archive size: {input_size / 1024 ** 2 * Nframes:.2f} MB')
+        print(f'Compressed archive size: {output_size / 1024 ** 2 * Nframes:.2f} MB')
+        print(f'Compression ratio: {ratio:.2f}x\n')
+
+    return input_size * Nframes, output_size * Nframes, ratio
+
+def decompress_and_convert(input_file, out_format = 'json'):
+    # Open the input file in binary mode for reading
+    with open(input_file, 'rb') as f_in:
+        # Read the compressed data from the input file
+        compressed_data = f_in.read()
+
+        # Decompress the data using lz4 decompression
+        decompressed_data = lz4.frame.decompress(compressed_data)    
+
+        if out_format == 'json':
+            # Decode the bytes to string
+            decoded_data = decompressed_data.decode('utf-8')
+            json_data = json.loads(decoded_data)
+            return json_data       
+        elif out_format == 'npz':
+            # Decode the bytes to string and parse JSON
+            npz_data = npz_data = np.load(io.BytesIO(decompressed_data), allow_pickle=True)
+            return npz_data      
+        else:
+            print('Invalid output format. Please use "json" or "npz"')
+            return
+        
+def unpack_arrays(json_dict, dtype_out = 'float64', exclude_keys=[]):
+    keys = list(json_dict['data'].keys())
+    arr_dict = {}
+    arr_dict = {key: np.array(json_dict['data'][key]['value'],dtype=dtype_out) for key in keys if key not in exclude_keys}
+   # for key in keys:
+    #    arr_dict[key] = np.array(json_dict['data'][key]['value'],dtype=dtype_out)
+    return arr_dict
+
+def unpack_nematic_json_dict(json_dict, dtype_out = 'float64', exclude_keys=[], calc_velocities = False):
+    keys = list(json_dict['data'].keys())
+    arr_dict = {}
+    arr_dict = {key: np.array(json_dict['data'][key]['value'],dtype=dtype_out) for key in keys if key not in exclude_keys}
+
+    if calc_velocities:
+        ff = np.array(json_dict['data']['ff']['value'],dtype=dtype_out)
+        arr_dict['vx'], arr_dict['vy'] = mp.base_modules.flow.velocity(ff,)
+    return arr_dict
+
+def find_missing_frames(archive_path):
+
+    ar = mp.archive.loadarchive(archive_path)
+
+    dir_list = os.listdir(archive_path)
+    frame_list = []
+
+    for item in dir_list:
+        if item.startswith("frame"):
+            frame_num = int(item.split('.')[0].split('frame')[-1])
+            frame_list.append(frame_num)
+
+    if len(frame_list) == ar.num_frames:
+        return np.arange(ar.nstart, ar.nsteps + 1, ar.ninfo)
+    else:
+        frame_list.sort()
+        return frame_list
+    
+def convert_json_to_npz(json_path, out_path, compress = True, dtype_out = 'float64', exclude_keys=[]):
+
+    with open(json_path, 'r') as f:
+        data = json.load(f)
+
+    arr_dict = unpack_arrays(data,  dtype_out = dtype_out, exclude_keys=exclude_keys)
+    if compress:
+        np.savez_compressed(out_path, **arr_dict)
+    else:
+        np.savez(out_path, **arr_dict)
+    return
+
+def create_npz_folder(archive_path, output_folder = None, check_for_missing_frames = False, compress = True, \
+                      dtype_out= 'float32', exclude_keys=[], verbose = 1):
+    """
+    verbose = 0: no output
+    verbose = 1: print time to process entire archive
+    verbose = 2: print time to process each frame
+    """
+    # Create the output folder if it does not exist
+
+    output_folder = archive_path + '_npz' if output_folder is None else output_folder
+
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    # copy parameters.json to output folder
+    parameters_path = os.path.join(archive_path, 'parameters.json')
+    shutil.copy(parameters_path, output_folder)
+
+    # Load the archive and get the list of frames
+    ar = mp.archive.loadarchive(archive_path)
+    frame_list = find_missing_frames(archive_path) if check_for_missing_frames else np.arange(ar.nstart, ar.nsteps + 1, ar.ninfo)
+
+    # initialize failed conversions list
+    failed_conversions = []
+
+    if verbose > 0:
+        start = time.perf_counter()
+
+    for i, frame in enumerate(frame_list):
+        frame_input_path = os.path.join(archive_path, f'frame{frame}.json')
+        frame_output_path = os.path.join(output_folder, f'frame{frame}.npz')
+        try:
+            if verbose == 2:
+                start_frame = time.perf_counter()
+            convert_json_to_npz(frame_input_path, frame_output_path, compress = compress, dtype_out = dtype_out, exclude_keys = exclude_keys)
+            if verbose == 2:
+                print(f'Frame {frame} processed in {time.perf_counter() - start_frame:.2f} seconds')
+        except:
+            print(f'Error processing frame {frame}. Skipping...')
+            failed_conversions.append(frame)
+
+    if verbose > 0:
+        print(f'Archive processed in {time.perf_counter() - start:.2f} seconds with {len(failed_conversions)} failed conversions')
+        if len(failed_conversions) > 0:
+            print(f'Frames for which conversion to npz failed: {failed_conversions}')
+        print('\nEstimated (from first frame) size reduction of archive: ')
+
+        frame_input_path = os.path.join(archive_path, f'frame{frame_list[0]}.json')
+        frame_output_path = os.path.join(output_folder, f'frame{frame_list[0]}.npz')
+        input_size, output_size, ratio = estimate_size_reduction(frame_input_path, frame_output_path, Nframes = len(frame_list))
+    return
+
+
 # Functions for nematic analysis  -----------------------------------------------------
 
 def get_frame_number(idx, path, ninfo):
@@ -77,7 +250,7 @@ def get_dir(Qxx, Qyx, return_S=False):
     else:
         return dx, dy
 
-def get_defect_list(archive, LX, LY, idx_first_frame=0, Nframes = None, verbose=False, archive_path = None):
+def get_defect_list(archive, idx_first_frame=0, Nframes = None, verbose=False, archive_path = None):
     """
     Get list of topological defects for each frame in archive
     Parameters:
@@ -89,6 +262,9 @@ def get_defect_list(archive, LX, LY, idx_first_frame=0, Nframes = None, verbose=
     """
     # Initialize list of top. defects
     top_defects = []
+
+    LX = archive.LX
+    LY = archive.LY
 
     Nframes = archive.__dict__['num_frames'] if Nframes is None else Nframes
     if verbose:
@@ -490,7 +666,6 @@ def do_adf_test(time_series, maxlag = None, autolag = 'AIC', regression = 'c', v
             print(f'\t{key}: {value}')
 
     return result
-
 
 def generate_moments(order_param, LX, conv_list):
 
