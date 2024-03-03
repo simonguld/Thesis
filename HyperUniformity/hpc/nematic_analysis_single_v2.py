@@ -13,6 +13,7 @@ import argparse
 
 import numpy as np
 from sklearn.neighbors import KDTree
+from sklearn.cluster import AgglomerativeClustering
 
 sys.path.append('/groups/astro/kpr279/')
 sys.path.append('/groups/astro/kpr279/.local/lib/python3.8/site-packages/')
@@ -53,7 +54,6 @@ def get_defect_arr_from_frame(defect_dict):
     for i, defect in enumerate(defect_dict):
         defect_positions[i] = defect['pos']
     return defect_positions
-
 
 def get_defect_list(archive, LX, LY, idx_first_frame=0, verbose=False):
     """
@@ -327,7 +327,6 @@ def get_structure_factor(top_defect_list, box_window, kmax = 1, debiased = True,
 
     return kbins_arr, sf_arr, rad_arr, pcf_arr
 
-
 def est_stationarity(time_series, interval_len, Njump, Nconverged, max_sigma_dist = 2):
  
     # Estimate the stationarity of a time series by calculating the mean and standard deviation
@@ -376,7 +375,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_folder', type=str)
     parser.add_argument('--output_folder', type=str)
-    parser.add_argument('--mode', type=int)
+    parser.add_argument('--mode', type=str)
     args = parser.parse_args()
 
     mode = args.mode

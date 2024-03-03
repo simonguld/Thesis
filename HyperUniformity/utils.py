@@ -77,7 +77,7 @@ def get_dir(Qxx, Qyx, return_S=False):
     else:
         return dx, dy
 
-def get_defect_list(archive, LX, LY, idx_first_frame=0, Nframes = None, verbose=False):
+def get_defect_list(archive, LX, LY, idx_first_frame=0, Nframes = None, verbose=False, archive_path = None):
     """
     Get list of topological defects for each frame in archive
     Parameters:
@@ -97,7 +97,10 @@ def get_defect_list(archive, LX, LY, idx_first_frame=0, Nframes = None, verbose=
     # Loop over frames
     for i in range(idx_first_frame, Nframes - idx_first_frame):
         # Load frame
-        frame = archive._read_frame(i)
+
+        frame_num = i if archive_path is None else get_frame_number(i, archive_path, archive.__dict__['ninfo'])
+
+        frame = archive._read_frame(frame_num)
         Qxx_dat = frame.QQxx.reshape(LX, LY)
         Qyx_dat = frame.QQyx.reshape(LX, LY)
         # Get defects
