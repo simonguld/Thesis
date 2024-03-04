@@ -1608,25 +1608,3 @@ if __name__ == "__main__":
     main()
 
 
-
-"""
-SCRAP
-    if do_hyperuniformity_analysis:
-        for N in range(ad.Ndata):
-
-            _, _ = ad.analyze_hyperuniformity(Ndataset = N, fit_densities=fit_densities, save = True, \
-                        weighted_mean = False, plot = False, use_merged = False,\
-                        act_idx_bounds=act_idx_bounds, window_idx_bounds=[30 - Npoints_to_fit, None])
-
-            for weighted in [True, False]:
-                ad.analyze_sfac(Ndataset=N, Npoints_bounds = Nbounds, act_idx_bounds = act_idx_bounds, use_merged = False, weighted=weighted, plot = False)
-                ad.analyze_sfac_time_av(Ndataset=N, Npoints_bounds = Nbounds, act_idx_bounds = act_idx_bounds, use_merged = False, weighted=weighted, plot = False)
-
-        _, _ = ad.analyze_hyperuniformity(Ndataset = N, fit_densities=fit_densities, save = True, \
-                        weighted_mean = False, plot = False, use_merged = True,\
-                        act_idx_bounds=act_idx_bounds, window_idx_bounds=[30 - Npoints_to_fit, None])
-
-        for weighted in [True, False]:
-            ad.analyze_sfac(Ndataset=N,  Npoints_bounds = Nbounds, act_idx_bounds = act_idx_bounds, use_merged = True, weighted=weighted, plot = False)  
-            ad.analyze_sfac_time_av(Ndataset=N,  Npoints_bounds = Nbounds, act_idx_bounds = act_idx_bounds, use_merged = True, weighted=weighted, plot = False)
-"""

@@ -16,9 +16,6 @@ from utils import *
 from plot_utils import *
 
 
-
-
-
 class AnalyseDefectsAll:
     def __init__(self, system_size_list, ):
         self.LX = system_size_list
@@ -78,8 +75,6 @@ class AnalyseDefectsAll:
             return
 
         return binder, susceptibility
-
-
 
     def plot_av_defects(self, fit_dict = {}, LX_list = None, act_bounds = None, plot_density = True, verbose = False, inset_box=None):
         """
@@ -198,7 +193,6 @@ class AnalyseDefectsAll:
         fig.tight_layout()
         return fig, ax
 
-
     def plot_alpha_mean2(self, use_density_fit = False, include_fluc=True, include_sfac = True, include_unweighted = True, act_bounds = None):
         
 
@@ -255,7 +249,6 @@ class AnalyseDefectsAll:
 
         fig.tight_layout()
         return fig, ax
-
     
     def plot_alpha_mean_all(self, use_density_fit = False, act_bounds = None):
         
@@ -319,7 +312,6 @@ class AnalyseDefectsAll:
         fig.suptitle(rf'Time av. of $\alpha $ vs activity', y = 1.018)
         fig.tight_layout()
         return fig, ax
-
 
     def plot_susceptibility(self, act_max_list = [], window_idx_bounds_list = None, \
                             act_bounds = None, verbose = False, save = False):

@@ -1,11 +1,20 @@
+# Author:  Simon Guldager
+# Date (latest update): 
+
+### SETUP ------------------------------------------------------------------------------------
+
+## Imports:
 import os
 import json
 import shutil
+import argparse
+
 from multiprocessing.pool import Pool as Pool
 from glob import glob
 from time import perf_counter
 
 import numpy as np
+
 
 
 
@@ -232,19 +241,28 @@ class CompressArchive:
             print(f'File {frame_output_path} created')
         return
 
-    def check_conversion_success(self, verbose = 1):
+    def check_conversion_success(self, files_list = None, verbose = 1):
         if len(self.failed_conversion_list) == 0:
-
-            # check that converted files can be opened and the self.include_keys key are present
-            for frame in self.frame_list:
-                npz_path = os.path.join(self.output_dir, f'frame{frame}.npz')
-                arr_dict = np.load(npz_path, allow_pickle=True)
-                for key in self.include_keys:
-                    if key not in arr_dict.files:
-                        print(f'Key {key} not found in frame {frame}')
-                        return False
+            if files_list is None:
+                # check that converted files can be opened and the self.include_keys key are present
+                for frame in self.frame_list:
+                    npz_path = os.path.join(self.output_dir, f'frame{frame}.npz')
+                    arr_dict = np.load(npz_path, allow_pickle=True)
+                    for key in self.include_keys:
+                        if key not in arr_dict.files:
+                            print(f'Key {key} not found in frame {frame}')
+                            return False
+            else:
+                for file in files_list:
+                    npz_path = os.path.join(self.output_dir, os.path.basename(file).replace('.json', '.npz'))
+                    arr_dict = np.load(npz_path, allow_pickle=True)
+                    for key in self.include_keys:
+                        if key not in arr_dict.files:
+                            print(f'Key {key} not found in file {npz_path}')
+                            return False
             if verbose > 0:
-                print(f'All {self.num_frames} frames successfully converted to npz')
+                nframes = self.num_frames if files_list is None else len(files_list)
+                print(f'All {nframes} frames successfully converted to npz')
             return True
         else:
             if verbose > 0:
@@ -257,28 +275,41 @@ def conversion_wrapper(frame_input_path, compressor):
 
 
 
+
+
+#### NBNBNBNBNNB  
+# CONTROL NUMPY MULTITHREADING!!!!
+# is os.environ written correctly??
+
+
+### MAIN ---------------------------------------------------------------------------------------
+
+
 if __name__ == '__main__':
-    main_path = 'C:\\Users\\Simon Andersen\\Dokumenter\\Uni\\Speciale\\Hyperuniformity\\nematic_data'
-    ns_base_path = 'ns1024_06'
-    archive_path = os.path.join(main_path, ns_base_path)
 
-    delete_original_archive = False
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input_folder', type=str)
+    parser.add_argument('--detete_if_successful', type=bool, default=False)
+    parser.add_argument('--test_mode', type=bool, default=False)
+    args = parser.parse_args()
 
-    Nfiles = 200
-    ntasks = min(Nfiles, os.cpu_count())
+    archive_path = args.input_folder
+    delete_original_archive = args.detete_if_successful
+    test_mode = args.test_mode
+    
+    files = glob(os.path.join(archive_path, 'frame*'))
+    Nfiles = 10 if test_mode else len(files)
+    files = files[:Nfiles] 
+
+    ntasks = min(Nfiles, os.environ['NCPUS_PER_TASK'])
     csize = 1
     
-
+    # Set the conversion parameters
     init_kwargs = {'archive_dir': archive_path, 'overwrite_existing_npz_files': False}
     conversion_kwargs = {'dtype_out': 'float32', 'compress': True, 'exclude_keys': ['ff'], 'calc_velocities': True}
 
+    # Initialize the compressor
     compressor = CompressArchive(**init_kwargs, conversion_kwargs = conversion_kwargs)
-
-    output_folder = compressor.output_dir
-    for file in glob(os.path.join(output_folder, 'frame*.npz')):
-        os.remove(file)
-    files = glob(os.path.join(archive_path, 'frame*'))
-    files = files[:min(Nfiles, len(files))]
 
     # Run the conversion in parallel
     t_start = perf_counter()
@@ -286,19 +317,12 @@ if __name__ == '__main__':
         p.starmap(conversion_wrapper, [(file, compressor) for file in files], chunksize=csize)
     print(f'Elapsed time: {perf_counter() - t_start:.2f} s')
 
-    # load the first npz file
-    npz_path = os.path.join(output_folder, f'frame{compressor.frame_list[0]}.npz')
-    arr_dict = np.load(npz_path, allow_pickle=True)
-
-    # print keys and the array shapes
-    for key in arr_dict.files:
-        print(f'{key}: {arr_dict[key].shape}')
 
     # print conversion info
     compressor.print_conversion_info()
 
     if delete_original_archive:
-        # delete the original archive if the conversion was successful
-        compressor.delete_original_archive(only_if_successful=True, call_cluster_cmd = False,)
+        compressor.delete_original_archive(only_if_successful=True, call_cluster_cmd = True,)
     else:
-        compressor.check_conversion_success()
+        compressor.check_conversion_success(files)
+    
