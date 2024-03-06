@@ -4,19 +4,20 @@
 ### SETUP ------------------------------------------------------------------------------------
 
 ## Imports:
+
 import os
 import sys
 import pickle
 import warnings
 import time
 import argparse
+import logging
 
 import numpy as np
 from sklearn.neighbors import KDTree
-from sklearn.cluster import AgglomerativeClustering
 
-sys.path.append('/groups/astro/kpr279/')
-sys.path.append('/groups/astro/kpr279/.local/lib/python3.8/site-packages/')
+from rpy2.rinterface_lib.callbacks import logger as rpy2_logger
+rpy2_logger.setLevel(logging.ERROR)   # will display errors, but not warnings
 
 from structure_factor.point_pattern import PointPattern
 from structure_factor.spatial_windows import BoxWindow
@@ -24,6 +25,7 @@ from structure_factor.hyperuniformity import bin_data
 from structure_factor.structure_factor import StructureFactor
 import structure_factor.pair_correlation_function as pcf
 
+sys.path.append('/groups/astro/kpr279/')
 import massPy as mp
 
 ## Change directory to current one
@@ -31,14 +33,12 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 os.chdir(dir_path)
 sys.path.append(os.getcwd())
 
-
 development_mode = False
 check_for_convergence = False
 
 # if development_mode, use only few frames
 if development_mode:
     num_frames = 3
-
 
 ### FUNCTIONS ----------------------------------------------------------------------------------
 
@@ -280,7 +280,7 @@ def get_density_fluctuations(top_defect_list, window_sizes, boundaries = None, N
     return count_fluctuation_arr, av_count_arr
 
 def get_structure_factor(top_defect_list, box_window, kmax = 1, debiased = True, direct = True, nbins = 50, \
-                         corr_func_method = "fv", method_kwargs = dict(method="b", spar=0.2, nknots = 40), rmax = 10):
+                        corr_func_method = "fv", method_kwargs = dict(method="b", spar=0.2, nknots = 40), rmax = 10):
     """
     Calculate structure factor for the frames in frame_interval
     """
@@ -302,12 +302,15 @@ def get_structure_factor(top_defect_list, box_window, kmax = 1, debiased = True,
         # Initialize point pattern
         point_pattern = PointPattern(defect_positions, box_window)
 
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=UserWarning)
+          #  warnings.simplefilter("ignore", category=RRuntimeWarning)
             sf = StructureFactor(point_pattern)
             k, sf_estimated = sf.scattering_intensity(k_max=kmax, debiased=debiased, direct=direct)
             pcf_estimated = pcf.estimate(point_pattern, method=corr_func_method, \
-                                 Kest=dict(rmax=rmax), fv=method_kwargs)
+                                Kest=dict(rmax=rmax), fv=method_kwargs)
+
 
         # Bin data
         knorms = np.linalg.norm(k, axis=1)
@@ -316,14 +319,17 @@ def get_structure_factor(top_defect_list, box_window, kmax = 1, debiased = True,
         # Store results
         if sf_arr is None:
             kbins_arr = kbins.astype('float')
-            rad_arr = pcf_estimated.r.values
-
             sf_arr = np.zeros([Nframes, len(kbins_arr), 2]) * np.nan
+
+            rad_arr = pcf_estimated.r.values
             pcf_arr = np.zeros([Nframes, len(rad_arr)]) * np.nan
    
         sf_arr[i, :, 0] = smeans
         sf_arr[i, :, 1] = sstds
         pcf_arr[i] = pcf_estimated.pcf
+
+    if sf_arr is None:
+        return None, None, None, None
 
     return kbins_arr, sf_arr, rad_arr, pcf_arr
 
@@ -379,15 +385,17 @@ def main():
     args = parser.parse_args()
 
     mode = args.mode
-    folder_path = args.input_folder
+    archive_path = args.input_folder
     output_path = args.output_folder
-    archive_path = os.path.join(folder_path)
 
     if mode == "sfac":
         calc_sfac = True
         calc_dens = False
     elif mode == "dens":
         calc_dens = True
+        calc_sfac = False
+    elif mode == 'extraction':
+        calc_dens = False
         calc_sfac = False
     else:
         calc_sfac = True
@@ -412,10 +420,9 @@ def main():
     # Get defect list
     top_defects = get_defect_list(ar, LX, LY,)
 
-    t2 = time.time()
-    msg = f"Time to extract defects for experiment {exp} and activity {act}: {np.round(t2-t1,2)} s"
-    print(msg)
-
+    # save top_defects
+    with open(os.path.join(output_path, 'defect_positions.pkl'), 'wb') as f:
+        pickle.dump(top_defects, f)
 
     if calc_sfac:
         # Define paths 
@@ -434,14 +441,17 @@ def main():
         kbins, sfac, rad_arr, pcf_arr = get_structure_factor(top_defects, box_window, kmax = kmax, debiased = True, direct = True, nbins = 50,\
                                                              corr_func_method = "fv", method_kwargs = dict(method="b", spar=0.2, nknots = 40), rmax = 10)
 
-        # Save structure factor
-        np.save(sfac_path, sfac)
-        np.savetxt(kbins_path, kbins)
-        np.savetxt(rad_path, rad_arr)
-        np.savetxt(pcf_path, pcf_arr)
+        if sfac is None:
+            print(f"No defects in experiment {exp} and activity {act}. Skipping...")
+        else:
+            # Save structure factor
+            np.save(sfac_path, sfac)
+            np.savetxt(kbins_path, kbins)
+            np.savetxt(rad_path, rad_arr)
+            np.savetxt(pcf_path, pcf_arr)
 
-        t3 = time.time()
-        msg = f"Time to analyze experiment {exp} and activity {act}: {np.round(t3-t2,2)} s"
+        t2 = time.time()
+        msg = f"Time to analyze experiment {exp} and activity {act}: {np.round(t2-t1,2)} s"
         print(msg)
 
         gen_status_txt(msg, os.path.join(output_path, 'sfac_analysis_completed.txt'))
@@ -487,8 +497,8 @@ def main():
         _, _ = get_density_fluctuations(top_defects[idx_first_frame:], window_sizes, boundaries = boundaries, N_center_points= None, Ndof=1, \
                                         save = True, save_path_av_counts=av_counts_path, save_path_var_counts=var_counts_path)
 
-        t4 = time.time()
-        msg = f"Time to analyze experiment {exp} and activity {act}: {np.round(t4-t3,2)} s"
+        t2 = time.time()
+        msg = f"Time to analyze experiment {exp} and activity {act}: {np.round(t2-t1,2)} s"
         print(msg)
 
         gen_status_txt(msg, os.path.join(output_path, 'dens_analysis_completed.txt'))

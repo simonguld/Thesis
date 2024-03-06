@@ -19,8 +19,9 @@ import numpy as np
 
 
 class CompressArchive:
-    def __init__(self, archive_dir, output_dir = None, overwrite_existing_npz_files = False, \
-                    conversion_kwargs = {'dtype_out': 'float64', 'compress': True, 'exclude_keys': [], 'calc_velocities': False},):
+    def __init__(self, archive_dir, output_dir = None, overwrite_existing_npz_files = False, first_frame_num = None, \
+                    conversion_kwargs = {'dtype_out': 'float64', \
+                    'compress': True, 'exclude_keys': [], 'calc_velocities': False},):
 
         self.archive_dir = archive_dir
         self.output_dir = archive_dir + '_npz' if output_dir is None else output_dir
@@ -35,6 +36,18 @@ class CompressArchive:
 
         with open(params_path, 'r') as f:
             self.simulation_params = json.load(f)['data']
+
+        if first_frame_num is None:
+            self.first_frame_num = self.simulation_params['nstart']['value']
+        else:
+            self.first_frame_num = first_frame_num
+            # change nstart in parameters.json in the output folder
+            params_path_out = os.path.join(self.output_dir, 'parameters.json')
+            with open(params_path_out, 'r') as f:
+                params = json.load(f)
+            params['data']['nstart']['value'] = first_frame_num
+            with open(params_path_out, 'w') as f:
+                json.dump(params, f)
 
         self.frame_list = self.__find_missing_frames()
         self.failed_conversion_list = []
@@ -106,10 +119,11 @@ class CompressArchive:
         for item in dir_list:
             if item.startswith("frame"):
                 frame_num = int(item.split('.')[0].split('frame')[-1])
-                frame_list.append(frame_num)
+                if frame_num >= self.first_frame_num:
+                    frame_list.append(frame_num)
 
         sp = self.simulation_params
-        frame_range = np.arange(sp['nstart']['value'], sp['nsteps']['value'] + 1, sp['ninfo']['value'])
+        frame_range = np.arange(self.first_frame_num, sp['nsteps']['value'] + 1, sp['ninfo']['value'])
 
         if len(frame_list) == len(frame_range):
             return frame_range
@@ -233,6 +247,7 @@ class CompressArchive:
             data = json.load(f)
 
         arr_dict = self.__unpack_json_dict(data)
+
         if self.compress:
             np.savez_compressed(frame_output_path, **arr_dict)
         else:
@@ -260,6 +275,13 @@ class CompressArchive:
                         if key not in arr_dict.files:
                             print(f'Key {key} not found in file {npz_path}')
                             return False
+                        array = arr_dict[key]
+                        if not array.shape[0] == self.LX * self.LY :
+                            print(f'Key {key} has wrong shape in file {npz_path}')
+                            return False
+                        if not array.dtype == self.dtype_out:
+                            print(f'Key {key} has wrong dtype in file {npz_path}')
+                            return False
             if verbose > 0:
                 nframes = self.num_frames if files_list is None else len(files_list)
                 print(f'All {nframes} frames successfully converted to npz')
@@ -274,38 +296,58 @@ def conversion_wrapper(frame_input_path, compressor):
     compressor.convert_json_to_npz_parallel(frame_input_path)
 
 
+def sort_files(files):
+    return sorted(files, key = lambda x: int(x.split('frame')[-1].split('.')[0]))
 
 
-
-#### NBNBNBNBNNB  
-# CONTROL NUMPY MULTITHREADING!!!!
-# is os.environ written correctly??
-
+def gen_status_txt(message = '', log_path = None):
+    """
+    Generate txt file with message and no.
+    """
+    with open(log_path, 'w') as f:
+        f.write(message)
+    return
 
 ### MAIN ---------------------------------------------------------------------------------------
 
 
 if __name__ == '__main__':
 
+    verbose = 0
+    local = False
+
+    call_cluster_cmd = False if local else True
+    ncores = os.cpu_count() if local else int(os.environ['SRUN_CPUS_PER_TASK'])
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_folder', type=str)
-    parser.add_argument('--detete_if_successful', type=bool, default=False)
-    parser.add_argument('--test_mode', type=bool, default=False)
+    parser.add_argument('--output_folder', type=str)
+    parser.add_argument('--num_frames', type=int, default=0)
+    parser.add_argument('--delete_if_successful', type=int, default=0)
+    parser.add_argument('--test_mode', type=int, default=0)
     args = parser.parse_args()
 
     archive_path = args.input_folder
-    delete_original_archive = args.detete_if_successful
-    test_mode = args.test_mode
+    output_dir = args.output_folder
+    delete_original_archive = bool(args.delete_if_successful)
+    test_mode = bool(args.test_mode)
+    num_frames_max = args.num_frames if args.num_frames > 0 else 2000
     
-    files = glob(os.path.join(archive_path, 'frame*'))
-    Nfiles = 10 if test_mode else len(files)
-    files = files[:Nfiles] 
+    files = sort_files(glob(os.path.join(archive_path, 'frame*')))
+    Nfiles = min(10, len(files)) if test_mode else min(num_frames_max, len(files))
+    files = files[-Nfiles:] 
+    first_frame_num = int(files[0].split('frame')[-1].split('.')[0])
 
-    ntasks = min(Nfiles, os.environ['NCPUS_PER_TASK'])
+    exp = int(output_dir.split('_')[-1])
+    act = float(output_dir.split('_')[-3])
+
+    ntasks = min(Nfiles, ncores)
     csize = 1
-    
+
+
     # Set the conversion parameters
-    init_kwargs = {'archive_dir': archive_path, 'overwrite_existing_npz_files': False}
+    init_kwargs = {'archive_dir': archive_path, 'output_dir': output_dir, \
+                   'overwrite_existing_npz_files': False, 'first_frame_num': first_frame_num}
     conversion_kwargs = {'dtype_out': 'float32', 'compress': True, 'exclude_keys': ['ff'], 'calc_velocities': True}
 
     # Initialize the compressor
@@ -315,14 +357,18 @@ if __name__ == '__main__':
     t_start = perf_counter()
     with Pool(ntasks) as p:
         p.starmap(conversion_wrapper, [(file, compressor) for file in files], chunksize=csize)
-    print(f'Elapsed time: {perf_counter() - t_start:.2f} s')
+    print(f'Time to convert all files for exp. {exp} and activity {act} using {ntasks} cpus: {perf_counter() - t_start:.2f} s')
 
-
-    # print conversion info
-    compressor.print_conversion_info()
+    if verbose > 0:
+        # print conversion info
+        compressor.print_conversion_info()
 
     if delete_original_archive:
         compressor.delete_original_archive(only_if_successful=True, call_cluster_cmd = True,)
     else:
-        compressor.check_conversion_success(files)
+        succesful_conversion = compressor.check_conversion_success(files, verbose=verbose)
     
+        if succesful_conversion:
+            print(f'All {Nfiles} files successfully converted to npz for exp. {exp} and activity {act}')
+            gen_status_txt('Conversion successful', log_path = os.path.join(output_dir, 'conversion_succesful.txt'))
+        print("")

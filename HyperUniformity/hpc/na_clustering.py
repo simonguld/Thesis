@@ -3,20 +3,21 @@
 
 ### SETUP ------------------------------------------------------------------------------------
 
-## Imports:
+
 import os
 import sys
 import pickle
 import warnings
 import time
 import argparse
+import logging
 
 import numpy as np
 from sklearn.neighbors import KDTree
 from sklearn.cluster import AgglomerativeClustering
 
-sys.path.append('/groups/astro/kpr279/')
-sys.path.append('/groups/astro/kpr279/.local/lib/python3.8/site-packages/')
+from rpy2.rinterface_lib.callbacks import logger as rpy2_logger
+rpy2_logger.setLevel(logging.ERROR)   # will display errors, but not warnings
 
 from structure_factor.point_pattern import PointPattern
 from structure_factor.spatial_windows import BoxWindow
@@ -24,7 +25,9 @@ from structure_factor.hyperuniformity import bin_data
 from structure_factor.structure_factor import StructureFactor
 import structure_factor.pair_correlation_function as pcf
 
+sys.path.append('/groups/astro/kpr279/')
 import massPy as mp
+
 
 ## Change directory to current one
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -410,14 +413,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_folder', type=str)
     parser.add_argument('--output_folder', type=str)
-    parser.add_argument('--mode', type=int)
+    parser.add_argument('--mode', type=str)
     args = parser.parse_args()
 
     mode = args.mode
     folder_path = args.input_folder
     output_path = args.output_folder
-    read_path = os.path.join(folder_path, f'defect_positions.pkl')
-
+    read_path = os.path.join(output_path, f'defect_positions.pkl')
 
     exp = int(output_path.split('_')[-1])
     act = float(output_path.split('_')[-3])
@@ -430,8 +432,9 @@ def main():
     with open(read_path, 'rb') as f:
         top_defects = pickle.load(f)
 
+    print("\nSucsessfully loaded defect positions")
 
-    dist_max = [10, 20, 30, 35, 40, 45, 50, 55, 60, 70, 80, 90]
+    dist_max = np.arange(31,50)
 
     for dist in dist_max:
         save_path = os.path.join(output_path, f'labels_rm{dist}.pkl')
