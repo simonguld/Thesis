@@ -176,52 +176,13 @@ class AnalyseDefects:
                 np.save(os.path.join(self.output_paths[N], 'pcf_time_av.npy'), pcf_time_av)
         return
 
-    def __calc_binder(self, Ndataset = 0, center = False):
-
-        suffix = '_centered' if center else '' 
-
-        defect_arr = self.get_arrays_full(Ndataset=Ndataset)[0]
-
-        if center:
-            av_defects = self.get_arrays_av(Ndataset=Ndataset)[-1]
-            defect_arr = defect_arr - av_defects[:,0][None, :, None]
-
-        act_list = self.act_list[Ndataset]
-        conv_list = self.conv_list[Ndataset]
-        Nact = len(act_list)
-
-        p4 = defect_arr ** 4
-        p2 = defect_arr ** 2
-
-        binder_cumulants = np.zeros([Nact, 2]) * np.nan
-        p4_av = np.zeros(Nact)
-        p2_av = np.zeros(Nact)
-        p4_std = np.zeros(Nact)
-        p2_std = np.zeros(Nact)
-
-        for i, act in enumerate(act_list):
-            Npoints = p4[conv_list[i]:,i,:].size
-            p4_av[i] = np.nanmean(np.nanmean(p4[conv_list[i]:,i,:]))
-            p2_av[i] = np.nanmean(np.nanmean(p2[conv_list[i]:,i,:]))
-            p4_std[i] = np.nanstd(p4[conv_list[i]:,i,:]) / np.sqrt(Npoints)
-            p2_std[i] = np.nanstd(p2[conv_list[i]:,i,:]) / np.sqrt(Npoints)
-        
-        binder_cumulants[:,0] = 1 - p4_av / (3 * p2_av ** 2)
-
-        # find the error in the binder cumulant
-        dzdx = lambda x, y: - 1 / (3 * y ** 2)
-        dzdy = lambda x, y: 2 * x / (3 * y ** 3)
-
-        correlation = calc_corr_matrix(np.array([p4_av, p2_av]).T)[0,1]
-        binder_cumulants[:,1] = prop_err(dzdx, dzdy, p4_av, p2_av, p4_std, p2_std, correlation = correlation)
-
-        return binder_cumulants
 
     def calc_binder_susceptibility(self, Ndataset = 0, order_param_func = None, Nscale = True, return_order_param = False, save = True):
 
         act_list = self.act_list[Ndataset]
         conv_list = self.conv_list[Ndataset]
         output_path = self.output_paths[Ndataset]
+        Nact = len(act_list)
 
         av_def = self.get_arrays_av(Ndataset = Ndataset)[-1]
         def_arr = self.get_arrays_full(Ndataset = Ndataset)[0]
@@ -231,43 +192,70 @@ class AnalyseDefects:
         else:
             order_param = order_param_func(def_arr, av_def, self.LX[Ndataset])
         
-
-        sus = np.zeros(len(act_list)) * np.nan
-        binder = np.zeros(len(act_list)) * np.nan
+        # Initialize arrays
+        binder_cumulants = np.zeros((Nact, 2)) * np.nan
+        sus = np.nan * np.zeros_like(binder_cumulants)
         order_param_av = np.nan * np.zeros((*order_param.shape[:-1], 2))
-   
+
+        p4 = order_param ** 4
+        p2 = order_param ** 2
+
+        p4_av = np.zeros_like(binder_cumulants)
+        p2_av = np.zeros_like(binder_cumulants)
+  
         for i, act in enumerate(act_list):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=RuntimeWarning)
-                sus[i] = np.nanmean(order_param[conv_list[i]:, i, :] ** 2) - np.nanmean(order_param[conv_list[i]:, i, :]) ** 2
 
-                binder[i] = np.nanmean((order_param[conv_list[i]:, i, :])**4) \
-                    / (3 * np.nanmean((order_param[conv_list[i]:, i, :])**2) ** 2)
+                # calculate the average and standard deviation of p4 and p2
+                Npoints = p4[conv_list[i]:,i,:].size
+                p4_av[i, 0] = np.nanmean(np.nanmean(p4[conv_list[i]:,i,:]))
+                p2_av[i, 0] = np.nanmean(np.nanmean(p2[conv_list[i]:,i,:]))
+                p4_av[i, 1] = np.nanstd(p4[conv_list[i]:,i,:]) / np.sqrt(Npoints)
+                p2_av[i, 1] = np.nanstd(p2[conv_list[i]:,i,:]) / np.sqrt(Npoints)
             
+                # calculate the order parameter
                 order_param_av[conv_list[i]:, i, 0] = np.nanmean(order_param[conv_list[i]:, i, :], axis = -1)
                 order_param_av[conv_list[i]:, i, 1] = np.nanstd(order_param[conv_list[i]:, i, :], axis = -1) / np.sqrt(self.Nframes[Ndataset] - conv_list[i])
+   
+                # calculate the susceptibility for each experiment and average over them
+                var_per_exp = np.nanmean(order_param[conv_list[i]:, i, :] ** 2, axis = 0) - np.nanmean(order_param[conv_list[i]:, i, :], axis = 0) ** 2
+          #      sus[i, 0] = np.nanmean(var_per_exp) 
 
-        binder = 1 - binder
+                sus[i,0] = np.nanmean(order_param[conv_list[i]:, i, :] ** 2,) - np.nanmean(order_param[conv_list[i]:, i, :]) ** 2
+              #  sus[i, 1] = np.nanstd(var_per_exp) / np.sqrt(self.Nexp[Ndataset])
+
+        # calculate binder cumulants
+        binder_cumulants[:,0] = 1 - p4_av[:, 0] / (3 * p2_av[:, 0] ** 2)
+
+        # find the error in the binder cumulant
+        dzdx = lambda x, y: - 1 / (3 * y ** 2)
+        dzdy = lambda x, y: 2 * x / (3 * y ** 3)
+
+        correlation = calc_corr_matrix(np.array([p4_av[:,0], p2_av[:,0]]).T)[0,1]
+        binder_cumulants[:,1] = prop_err(dzdx, dzdy, p4_av[:,0], p2_av[:,0], p4_av[:,1], p2_av[:,1], correlation = correlation)
+
+
         if Nscale:
-            sus[:] *= av_def[:, 0]
+            sus *= av_def[:, 0][:, None]
 
         if save:
             np.save(os.path.join(output_path, 'susceptibility.npy'), sus)
-            np.save(os.path.join(output_path, 'binder_cumulants.npy'), binder)
+            np.save(os.path.join(output_path, 'binder_cumulants.npy'), binder_cumulants)
             np.save(os.path.join(output_path, 'order_param_av.npy'), order_param_av)
 
         if return_order_param:
-            return sus, binder, order_param_av
+            return sus, binder_cumulants, order_param_av
         else:
-            return sus, binder
+            return sus, binder_cumulants
 
     def update_conv_list(self, Ndataset_list = None):
         if Ndataset_list is None:
             Ndataset_list = range(self.Ndata)
         
         for i in Ndataset_list:
-            fig, ax = self.plot_defects_per_activity(Ndataset = i, act_min_idx = 0, act_max_idx = None, plot_density = False)
-            
+            fig, ax = self.plot_defects_per_activity(Ndataset = i, plot_density = False)
+            plt.show()
             for j in range(self.Nactivity[i]):
                 self.conv_list[i][j] = int(input(f'Enter the first frame to use for activity {self.act_list[i][j]}: '))
 
@@ -769,6 +757,7 @@ class AnalyseDefects:
 
         if save:
             np.save(os.path.join(output_path, f'fit_params_sfac_time_av{suffix}.npy'), fit_params_sfac_time_av)
+            np.save(os.path.join(output_path, f'act_list_alpha_fit_sfac.npy'), act_list)
         if plot:
 
             ncols = 4
@@ -1024,12 +1013,12 @@ class AnalyseDefects:
                 fig, ax = plt.subplots(nrows = nrows, ncols = ncols, figsize=(16, height))
                 ax = ax.flatten()  
                 defect_arr_act = (defect_arr[:, i, :] / norm).astype(float)
-                mini, maxi = np.nanmin(defect_arr_act) * 0.3, np.nanmax(defect_arr_act) * 1.5
+                mini, maxi = np.nanmin(defect_arr_act) * 0.5, np.nanmax(defect_arr_act) * 1.3
 
                 for j in np.arange(self.Nexp[Ndataset]):
                     ax[j].plot(np.arange(self.Nframes[Ndataset]), defect_arr_act[:, j], '.', label='Exp = {}'.format(j), alpha = 0.5)
                     ax[j].legend()  
-                    ax[j].set_ylim(0, maxi)
+                    ax[j].set_ylim(mini, maxi)
 
                 fig.suptitle(f'{title} for activity = {act}' , fontsize=18)
                 fig.supxlabel('Frame', fontsize=18)
@@ -1137,7 +1126,7 @@ class AnalyseDefects:
 
             suffix = 'dens' if use_density_fit else 'count'
             output_path, Ndataset = self.__get_outpath_path(Ndataset, use_merged)
-
+            act_list = self.act_list[Ndataset]
 
             fluc_path = os.path.join(output_path, f'alpha_list_{suffix}.npy')
             sfac_path = os.path.join(output_path, f'alpha_list_sfac.npy')
@@ -1186,9 +1175,9 @@ class AnalyseDefects:
             fig, ax = plt.subplots(figsize=(9, 6))
 
             if 'fluc' in include:
-                act_list_fluc = np.load(os.path.join(output_path, f'act_list_alpha_fit.npy'))
+                act_list_fluc = act_list # np.load(os.path.join(output_path, f'act_list_alpha_fit.npy'))
             if len(set(include).difference(set(['fluc']))) > 0:
-                act_list_sfac = np.load(os.path.join(output_path, f'act_list_alpha_fit_sfac.npy'))
+                act_list_sfac = act_list # np.load(os.path.join(output_path, f'act_list_alpha_fit_sfac.npy'))
     
             for i, file_name in enumerate(file_name_list):
                 try:
@@ -1225,8 +1214,9 @@ class AnalyseDefects:
             act_idx_bounds = [0, len(self.act_list[Ndataset])]
 
         act_list = self.act_list[Ndataset][act_idx_bounds[0]:act_idx_bounds[1]]
-        act_idx_max = 0.022 if act_max is None else act_list.index(act_max)
-
+        act_max = 0.022 if act_max is None else act_max
+        act_idx_max = act_list.index(act_max)
+     
         try:
             binder, sus, order_param = self.get_binder_susceptibility(Ndataset = Ndataset)
             order_param_time_av = np.nanmean(order_param[:,:,0], axis = 0)
@@ -1237,9 +1227,9 @@ class AnalyseDefects:
         
         fig, ax = plt.subplots(2,2, figsize = (20, 20))
         ax = ax.flatten()
-        ax[0].plot(act_list, sus, marker = 'o-', alpha=.3, label = r'$\chi(\zeta)$ = \langle N_d (\zeta) \rangle \langle \delta \psi^2 \rangle $')
-        ax[1].plot(act_list, binder, marker = 'o', alpha=.3, label=r'$U_B(\zeta) = 1 - \frac{\langle \psi^4 \rangle}{3 \langle \psi^2 \rangle ^2}$')
-        ax[2].plot(act_list, sus / sus[act_idx_max], marker = 'o', alpha=.3)
+        ax[0].errorbar(act_list, sus[:,0], sus[:,1], marker = 'o', alpha=.3, label = r'$\chi(\zeta)$ = \langle N_d (\zeta) \rangle \langle \delta \psi^2 \rangle $')
+        ax[1].errorbar(act_list, binder[:,0], binder[:,1], marker = 'o', alpha=.3, label=r'$U_B(\zeta) = 1 - \frac{\langle \psi^4 \rangle}{3 \langle \psi^2 \rangle ^2}$')
+        ax[2].errorbar(act_list, sus[:,0] / sus[act_idx_max,0], sus[:,1] / sus[act_idx_max,0], marker = 'o', alpha=.3)
         ax[3].errorbar(act_list, order_param_time_av, order_param_time_av_std, label = rf'{order_param_string}', marker = 'o', alpha=.3)
 
         ax[0].legend()
@@ -1509,7 +1499,6 @@ class AnalyseDefects:
                 os.makedirs(os.path.join(output_path, 'figs'))
             fig.savefig(os.path.join(output_path, f'figs\\dens_fluc_time_av.png'), dpi = 420, pad_inches=0.25)       
         return fig, ax
-
 
 
 

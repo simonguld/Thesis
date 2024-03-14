@@ -48,7 +48,7 @@ def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False
         order_param = def_arr - av_def_max
     else:
         order_param = def_arr 
-    order_param /= av_defects[:,0][None, :, None]
+    order_param /= np.sqrt(av_defects[:,0][None, :, None])
     
     return order_param
         
@@ -62,13 +62,13 @@ def main():
     do_merge = True
 
     system_size_list = [256, 512, 1024, 2048]
-    system_size_list = [2048]
+   #system_size_list = [2048]
     mode = 'all' # 'all' or 'short'
 
     # order parameter parameters
-    shift = True
+    shift = False
     shift_by_act = 0.022
-    Nscale = True
+    Nscale = False
 
     # hyperuniformity parameters
     act_idx_bounds=[0,None]
