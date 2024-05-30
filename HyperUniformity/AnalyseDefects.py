@@ -4,8 +4,11 @@
 ### SETUP ------------------------------------------------------------------------------------
 
 ## Imports:
+
 import os
 import warnings
+import pickle as pkl
+import pathlib
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,7 +16,6 @@ from matplotlib import ticker
 
 from utils import *
 from plot_utils import *
-
 
 
 class AnalyseDefects:
@@ -176,8 +178,8 @@ class AnalyseDefects:
                 np.save(os.path.join(self.output_paths[N], 'pcf_time_av.npy'), pcf_time_av)
         return
 
-
-    def calc_binder_susceptibility(self, Ndataset = 0, order_param_func = None, Nscale = True, return_order_param = False, save = True):
+    def calc_binder_susceptibility(self, Ndataset = 0, order_param_func = None, Nscale = True, \
+                                   return_order_param = False, save = True):
 
         act_list = self.act_list[Ndataset]
         conv_list = self.conv_list[Ndataset]
@@ -886,6 +888,52 @@ class AnalyseDefects:
             
         return fit_params
 
+    def print_params(self, Ndataset = 0, act = [], param_keys = ['nstart', 'nsteps']):
+        """
+        Print out the simulation parameters for the given dataset.
+        If act is [], simulation parameters for all activities will be output.
+        """
+
+        # change pathlib to WindowsPath to avoid error
+        temp = pathlib.PosixPath
+        pathlib.PosixPath = pathlib.WindowsPath
+
+        act_path = self.act_dir_list[Ndataset]
+        act_list = self.act_list[Ndataset] if len(act) == 0 else act
+
+        for activity in act_list:
+            # load pkl dictionary
+            act_idx = self.act_list[Ndataset].index(activity)
+            if activity in [0.02, 0.03, 0.2]:
+                activity = str(activity) + '0'
+            base_path = os.path.join(act_path[act_idx], f'zeta_{activity}_counter')
+
+            if os.path.isdir(base_path + '_0'):
+                dict_path = base_path + '_0'
+            elif os.path.isdir(base_path + '_10'):
+                dict_path = base_path + '_10'
+            elif os.path.isdir(base_path + '_20'):
+                dict_path = base_path + '_20'
+            else:
+                print(f"Parameter dictionary was not found for activity {activity}")
+                continue
+
+            dict_path = os.path.join(dict_path, 'model_params.pkl')
+   
+            with open(dict_path, 'rb') as f:
+                param_dict = pkl.load(f)
+
+            print(f"\nFor activity = {activity}:")
+            for key in param_keys:
+                try:
+                    print(f"{key}: {param_dict[key]}")
+                except:
+                    print(f"{key} not found in parameter dictionary.")
+        # reset pathlib
+        pathlib.PosixPath = temp
+        return
+
+
     def plot_av_defects(self, Ndataset = 0, fit_dict = {}, plot_density = True, verbose = False, use_merged = False):
         """
         fit_dict: dictionary containing the fit parameters with keys
@@ -1539,8 +1587,24 @@ def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False
     return order_param
         
 
-
 def main():
+    LL = 256
+    output_path = f'data\\nematic_analysis{LL}_LL0.05'
+    mode = 'all' # 'all' or 'short'
+
+    defect_list = gen_analysis_dict(LL, mode)
+
+    ad = AnalyseDefects(defect_list, output_path=output_path)
+
+    for N in range(ad.Ndata):
+        print("For N = ", N )
+        try:
+            ad.print_params(Ndataset=N,act=[0.020])
+        except:
+            pass
+
+
+def main2():
     do_extraction = False
     do_basic_analysis = True
     do_hyperuniformity_analysis = True
