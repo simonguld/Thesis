@@ -7,6 +7,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 plt.style.use('sg_article')
 
@@ -14,6 +15,120 @@ from utils import *
 
 
 ### FUNCTIONS ----------------------------------------------------------------------------------
+
+
+def animate(oa, fn, rng=[], inter=500, show=True, save = False, save_path = None):
+    """Show a frame-by-frame animation.
+
+    Parameters:
+    oa -- the output archive
+    fn -- the plot function (argument: frame, plot engine)
+    rng -- range of the frames to be ploted
+    interval -- time between frames (ms)
+    """
+    # set range
+    if len(rng)==0:
+        rng = [ 1, oa._nframes+1 ]
+    # create the figure
+    fig = plt.figure(figsize = (9,9))
+
+    # the local animation function
+    def animate_fn(i):
+        # we want a fresh figure everytime
+        fig.clf()
+        # add subplot, aka axis
+        #ax = fig.add_subplot(111)
+        # load the frame
+        f = get_frame_number(i, oa._path, oa.ninfo)
+
+        plt.title(f'Frame {f}')
+        fig.text(0.2, 0.96, '-1/2', fontsize=14, verticalalignment='bottom', color='blue', fontweight='bold')
+        fig.text(0.8, 0.96, '+1/2',fontsize=14, verticalalignment='bottom', color='green', fontweight='bold');
+
+        
+        frame = oa._read_frame(f)
+        # call the global function
+        fn(frame, plt)
+
+    anim = FuncAnimation(fig, animate_fn,
+                             frames=np.arange(rng[0], rng[1]),
+                             interval=inter, blit=False)
+    if save:
+        LX = oa.LX
+        act = oa.zeta
+        save_to = save_path if save_path else f'anim_L{LX}_zeta{act}.mp4'
+        fps = 1000 / inter
+        anim.save(save_to, dpi=420, fps=fps)
+
+    if show==True:
+      plt.show()
+      return
+
+    return anim
+
+
+def plot_frames(ar, archive_path, frame_idx_bounds = [], save = False, save_path = None):
+    """
+
+    Parameters:
+    -----------
+    ar: massPy.archive object
+        massPy archive object containing the data
+    archive_path: str
+        path to the archive
+    frame_idx_bounds: list 
+        list of two integers specifying the bounds of the frames to plot (last frame is not included). If empty, all frames are plotted
+    save: bool
+        whether to save the figure or not
+    """
+
+
+    if len(frame_idx_bounds) == 0:
+        Nframes = len([i for i in os.listdir(archive_path) if i.startswith('frame')])
+    else:
+        Nframes = frame_idx_bounds[1] - frame_idx_bounds[0]
+
+    nrows = int(np.ceil(Nframes/3))
+    fig_height = 6 * nrows
+    fig, ax = plt.subplots(nrows=2,ncols=3,figsize=(18, fig_height))
+    ax = ax.flatten()
+    for i in range(Nframes):
+        
+
+        f = get_frame_number(i, archive_path, ar.ninfo)
+        frame = ar._read_frame(f)
+        
+
+        # Get actual frame number
+        frame_num = ar.nstart + f * ar.ninfo
+        ax[i].set(title = f'Frame = {frame_num:.1e}')
+
+        LX = ar.LX
+        LY = ar.LY 
+        Qxx_dat = frame.QQxx.reshape(LX, LY)
+        Qyx_dat = frame.QQyx.reshape(LX, LY)
+        
+        defects = mp.nematic.nematicPy.get_defects(Qxx_dat, Qyx_dat, LX, LY)
+
+        ms = 4
+        alpha = 1
+
+        ax[i].xaxis.set_ticks_position('none')
+        ax[i].yaxis.set_ticks_position('none')
+
+        mp.nematic.plot.defects(frame, ax[i], ms = ms, alpha=alpha)
+        mp.nematic.plot.director(frame, ax[i], ms = .5, lw=.7)
+
+
+    fig.text(0.35, 0.99, '-1/2', fontsize=14, verticalalignment='bottom', color='blue', fontweight='bold')
+    fig.text(0.65, 0.99, '+1/2',fontsize=14, verticalalignment='bottom', color='green', fontweight='bold');
+
+    if save:
+        save_to = save_path if save_path is not None else 'frames.png'
+        fig.savefig(save_to, dpi = 420, bbox_inches='tight')
+
+    return fig, ax
+
 
 def plot_structure_factor(kbins, smeans, sstds, k = None, sf_estimated = None):
     """
