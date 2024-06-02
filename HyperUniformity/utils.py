@@ -1,5 +1,5 @@
 # Author: Simon Guldager Andersen
-# Date(last edit): 05-01-2024
+# Date(last edit): June 2 2024
 
 ## Imports:
 import os
@@ -10,11 +10,13 @@ import shutil
 import io
 import lz4
 import json
+import pickle
 
 import numpy as np
 from iminuit import Minuit
 from scipy import stats
 from sklearn.neighbors import KDTree
+from sklearn.cluster import AgglomerativeClustering
 from statsmodels.tsa.stattools import adfuller
 
 
@@ -488,6 +490,213 @@ def get_density_fluctuations(top_defect_list, window_sizes, boundaries = None, N
 
     return count_fluctuation_arr, av_count_arr
 
+def gen_clustering_metadata(path,):
+    """
+    Given a path to a directory containing the defect clustering data, it returns Nexp_list, act_list, act_dir_list
+    """
+
+    Nexp_list = []
+    act_list = []
+    act_dir_list = []
+ 
+    for i, dir in enumerate(os.listdir(path)):
+        if dir.startswith('analysis'):
+            act_list.append(float(dir.split('_')[-1]))
+            act_dir_list.append(os.path.join(path, dir))
+    for i, file in enumerate(os.listdir(os.path.join(path, os.listdir(path)[0]))):
+        if file.startswith('zeta'):
+            Nexp_list.append(int(file.split('_')[-1]))
+
+    return Nexp_list, act_list, act_dir_list
+
+def do_poisson_clustering(Nlist, L, Ntrial, Ncmin = 2, method_kwargs = dict(n_clusters=None, linkage = 'single', distance_threshold=33)):
+    """
+    Simulate points uniformly and do Agglomerative clustering for a given set of parameters
+
+    Nlist: list of number of defects for each activity
+    L: length of the square box
+    Ntrial: number of trials per N in Nlist
+    Ncmin: minimum number of defects in a cluster
+    method_kwargs: dictionary of arguments for AgglomerativeClustering
+
+    Returns: cluster_arr, cl_mean, cl_std
+
+    """
+
+    cluster_arr = np.nan * np.zeros([4, len(Nlist), Ntrial])
+
+    for i, N in enumerate(Nlist):
+
+        p_arr = np.random.rand(N, 2, Ntrial) * L   
+        cst = AgglomerativeClustering(**method_kwargs)
+
+        for j in range(Ntrial):
+
+            # Get defect array for frame
+            defect_positions = p_arr[:, :, j]
+
+            labels = cst.fit_predict(defect_positions)
+
+            unique, counts = np.unique(labels, return_counts=True)
+
+            # Only count clusters with more than Ncmin defects
+            mask = (counts >= Ncmin)
+            counts_above_min = counts[mask]
+
+            # store the total number of defects
+            cluster_arr[0, i, j] = N
+
+            # store the fraction of clustered defects
+            cluster_arr[1, i, j] = counts_above_min.sum() / N
+
+            # store the number of clusters
+            cluster_arr[2, i, j] = len(counts_above_min)
+    
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+
+                # store the average cluster size
+                cluster_arr[3, i, j] = np.mean(counts_above_min)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        cl_mean = np.nanmean(cluster_arr, axis = -1)
+        cl_std = np.nanstd(cluster_arr, axis = -1)
+        cl_std /= np.sqrt(Ntrial)
+
+    return cluster_arr, cl_mean, cl_std
+
+def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, method_kwargs = dict(n_clusters=None, linkage = 'single', distance_threshold=33)):
+    """
+    This function is an improved version of do_poisson_clustering. It allows for Ndefects to vary for each activity,
+    and also allows for Ntrial to be bigger than the number of defect entries in def_arr. For each run, it randomly selects
+    Ndefects from the given column in def_arr, simulates points uniformly and performs the clustering.
+
+    Parameters:
+        def_arr: array of defect entries for each activity. Format (Ndefect_entries, Nactivities)
+        L: length of the square box
+        Ntrial: number of trials per column in def_arr
+        Ncmin: minimum number of defects in a cluster
+        method_kwargs: dictionary of arguments for AgglomerativeClustering
+
+    Returns: cluster_arr, cl_mean, cl_std
+
+    """
+    
+    _, Nact = def_arr.shape
+
+    cluster_arr = np.nan * np.zeros([4, Nact, Ntrial])
+
+    for i in range(Nact):
+
+        for j in range(Ntrial):
+
+            N = np.random.choice(def_arr[:, i], size = 1)[0]
+
+            if np.isnan(N):
+                continue
+
+            # generate points
+            N = int(N)
+            defect_positions = np.random.rand(N, 2) * L   
+
+            # cluster
+            cst = AgglomerativeClustering(**method_kwargs)
+            labels = cst.fit_predict(defect_positions)
+
+            unique, counts = np.unique(labels, return_counts=True)
+
+            # Only count clusters with more than Ncmin defects
+            mask = (counts >= Ncmin)
+            counts_above_min = counts[mask]
+
+            # store the total number of defects
+            cluster_arr[0, i, j] = N
+
+            # store the fraction of clustered defects
+            cluster_arr[1, i, j] = counts_above_min.sum() / N
+
+            # store the number of clusters
+            cluster_arr[2, i, j] = len(counts_above_min)
+    
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+
+                # store the average cluster size
+                cluster_arr[3, i, j] = np.mean(counts_above_min)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        cl_mean = np.nanmean(cluster_arr, axis = -1)
+        cl_std = np.nanstd(cluster_arr, axis = -1)
+        cl_std /= np.sqrt(Ntrial)
+
+    return cluster_arr, cl_mean, cl_std
+
+def extract_clustering_results(Nframes, act_list, act_dir_list, Nexp, Ncmin=2, save = False, save_path = None):
+    """
+    Analyse the defects for all the input folders
+    """
+    for data_set in range(1):
+        # create arrays to store the clustering data
+        cluster_arr = np.nan * np.zeros([Nframes, 4, len(act_list), Nexp])
+        
+        # print('Analysing clustering data for input folder {}'.format(self.input_paths[N]))
+        for i, (act, act_dir) in enumerate(zip(act_list, act_dir_list)):
+
+            exp_list = []
+            exp_dir_list = []
+
+            for file in os.listdir(act_dir):
+                exp_count = file.split('_')[-1]
+                exp_list.append(int(exp_count))
+                exp_dir_list.append(os.path.join(act_dir, file))
+
+            # sort the activity list and the activity directory list
+            exp_list, exp_dir_list = zip(*sorted(zip(exp_list, exp_dir_list)))
+
+            for j, (exp, exp_dir) in enumerate(zip(exp_list, exp_dir_list)):
+
+                with open(os.path.join(exp_dir, 'labels_rm33.pkl'), 'rb') as f:
+                        labels = pickle.load(f)
+                nan_counter = 0
+                for k, frame in enumerate(labels[:Nframes]):
+                        
+                        if frame is None:
+                            nan_counter += 1
+                            continue
+
+                        Ndefects = len(frame)
+                             
+                        # store the number of defects 
+                        cluster_arr[k, 0, i, j] = Ndefects
+
+                        counts = np.unique(frame, return_counts=True)[1]
+
+                        # Only count clusters with more than Ncmin defects
+                        mask = (counts >= Ncmin)
+                        counts_above_min = counts[mask]
+
+                        # store the fraction of clustered defects
+                        cluster_arr[k, 1, i, j] = counts_above_min.sum() / Ndefects
+                        # store the number of clusters
+                        cluster_arr[k, 2, i, j] = len(counts_above_min)
+                
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore", category=RuntimeWarning)
+                            # store the average cluster size
+                            cluster_arr[k, 3, i, j] = np.nanmean(counts_above_min)
+
+        # average over experiments and frames
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            cl_mean = np.nanmean(cluster_arr, axis = (0,-1))
+            cl_std = np.nanstd(cluster_arr, axis = (0,-1))
+            cl_std /= np.sqrt(Nframes * Nexp)
+        if save:
+            pass
+    return cluster_arr, cl_mean, cl_std
+
 
 ### Functions for statistical analysis ------------------------------------------------
 
@@ -685,4 +894,67 @@ def generate_moments(order_param, LX, conv_list):
 
     return moments
 
+def one_sample_test(sample_array, exp_value, error_on_mean = None, one_sided = False, small_statistics = False):
+    """ Assuming that the errors to be used are the standard error on the mean as calculated by the sample std 
+    Returns test-statistic, p_val
+    If a scalar sample is passed, the error on the mean must be passed as well, and large statistics is assumed
+    """
+    if np.size(sample_array) == 1:
+        assert(error_on_mean is not None)
+        assert(np.size(error_on_mean) == 1)
+        assert(small_statistics == False)
+        SEM = error_on_mean
+        x = sample_array
+    else:
+        x = sample_array.astype('float')
+        Npoints = np.size(x)
+        SEM = x.std(ddof = 1) / np.sqrt(Npoints)
+    
+    test_statistic = (np.mean(x) - exp_value) / SEM
 
+    if small_statistics:
+        p_val = stats.t.sf(np.abs(test_statistic), df = Npoints - 1)
+    else:
+        p_val = stats.norm.sf(np.abs(test_statistic))
+
+    if one_sided:
+        return test_statistic, p_val
+    else:
+        return test_statistic, 2 * p_val
+
+def two_sample_test(x, y, x_err = None, y_err = None, one_sided = False, small_statistics = False):
+    """
+    x,y must be 1d arrays of the same length. 
+    If x and y are scalars, the errors on the means x_rr and y_rr must be passed as well, and small_statistics must be False
+    If x and y are arrays, the standard errors on the mean will be used to perform the test
+
+    Returns: test_statistics, p_val
+    """
+    Npoints = np.size(x)
+    assert(np.size(x) == np.size(y))
+
+    if x_err == None:
+        SEM_x = x.std(ddof = 1) / np.sqrt(Npoints)
+    else:
+        assert(small_statistics == False)
+        assert(np.size(x_err) == 1)
+        SEM_x = x_err
+        
+    if y_err == None:
+        SEM_y = y.std(ddof = 1) / np.sqrt(Npoints)
+    else:
+        assert(small_statistics == False)
+        assert(np.size(y_err) == 1)
+        SEM_y = y_err
+        
+
+    test_statistic = (np.mean(x) - np.mean(y)) / (np.sqrt(SEM_x ** 2 + SEM_y ** 2)) 
+
+    if small_statistics:
+        p_val = stats.t.sf(np.abs(test_statistic), df = 2 * (Npoints - 1))
+    else:
+        p_val = stats.norm.sf(np.abs(test_statistic))
+    if one_sided:
+        return test_statistic, p_val
+    else:
+        return test_statistic, 2 * p_val
