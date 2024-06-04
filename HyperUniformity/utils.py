@@ -490,6 +490,42 @@ def get_density_fluctuations(top_defect_list, window_sizes, boundaries = None, N
 
     return count_fluctuation_arr, av_count_arr
 
+def get_clustering(top_defect_list, method, method_kwargs, save = False, save_path = None):
+    """
+    
+    Parameters:
+    -----------
+
+    
+    Returns:
+    --------
+    
+
+    """
+  
+    labels_list = []
+    cst = method(**method_kwargs)
+
+    for frame, defects in enumerate(top_defect_list):
+
+        # Get defect array for frame
+        defect_positions = get_defect_arr_from_frame(defects)
+
+        if defect_positions is None:
+            labels_list.append(None)
+            continue
+
+        labels = cst.fit_predict(defect_positions)
+        labels_list.append(labels)
+
+    if save:
+        # save labels list
+        save_path = save_path if save_path is not None else 'labels_list.pkl'
+        with open(save_path, 'wb') as f:
+            pickle.dump(labels_list, f)
+
+    return labels_list
+
 def gen_clustering_metadata(path,):
     """
     Given a path to a directory containing the defect clustering data, it returns Nexp_list, act_list, act_dir_list
@@ -584,14 +620,19 @@ def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, method_kwargs 
     """
     
     _, Nact = def_arr.shape
-
     cluster_arr = np.nan * np.zeros([4, Nact, Ntrial])
+
+    cst = AgglomerativeClustering(**method_kwargs)
 
     for i in range(Nact):
 
+        Nlist = np.random.choice(def_arr[:, i], size = Ntrial)
+        
+
         for j in range(Ntrial):
 
-            N = np.random.choice(def_arr[:, i], size = 1)[0]
+           # N = np.random.choice(def_arr[:, i], size = 1)[0]
+            N = Nlist[j]
 
             if np.isnan(N):
                 continue
@@ -601,10 +642,9 @@ def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, method_kwargs 
             defect_positions = np.random.rand(N, 2) * L   
 
             # cluster
-            cst = AgglomerativeClustering(**method_kwargs)
             labels = cst.fit_predict(defect_positions)
 
-            unique, counts = np.unique(labels, return_counts=True)
+            counts = np.unique(labels, return_counts=True)[1]
 
             # Only count clusters with more than Ncmin defects
             mask = (counts >= Ncmin)
