@@ -250,6 +250,51 @@ class AnalyseDefects:
             return sus, binder_cumulants, order_param_av
         else:
             return sus, binder_cumulants
+   
+    def print_params(self, Ndataset = 0, act = [], param_keys = ['nstart', 'nsteps']):
+        """
+        Print out the simulation parameters for the given dataset.
+        If act is [], simulation parameters for all activities will be output.
+        """
+
+        # change pathlib to WindowsPath to avoid error
+        temp = pathlib.PosixPath
+        pathlib.PosixPath = pathlib.WindowsPath
+
+        act_path = self.act_dir_list[Ndataset]
+        act_list = self.act_list[Ndataset] if len(act) == 0 else act
+
+        for activity in act_list:
+            # load pkl dictionary
+            act_idx = self.act_list[Ndataset].index(activity)
+            if activity in [0.02, 0.03, 0.2]:
+                activity = str(activity) + '0'
+            base_path = os.path.join(act_path[act_idx], f'zeta_{activity}_counter')
+
+            if os.path.isdir(base_path + '_0'):
+                dict_path = base_path + '_0'
+            elif os.path.isdir(base_path + '_10'):
+                dict_path = base_path + '_10'
+            elif os.path.isdir(base_path + '_20'):
+                dict_path = base_path + '_20'
+            else:
+                print(f"Parameter dictionary was not found for activity {activity}")
+                continue
+
+            dict_path = os.path.join(dict_path, 'model_params.pkl')
+   
+            with open(dict_path, 'rb') as f:
+                param_dict = pkl.load(f)
+
+            print(f"\nFor activity = {activity}:")
+            for key in param_keys:
+                try:
+                    print(f"{key}: {param_dict[key]}")
+                except:
+                    print(f"{key} not found in parameter dictionary.")
+        # reset pathlib
+        pathlib.PosixPath = temp
+        return
 
     def update_conv_list(self, Ndataset_list = None):
         if Ndataset_list is None:
@@ -887,52 +932,6 @@ class AnalyseDefects:
                                             weighted = weighted, act_idx_bounds = act_idx_bounds, use_merged = use_merged)
             
         return fit_params
-
-    def print_params(self, Ndataset = 0, act = [], param_keys = ['nstart', 'nsteps']):
-        """
-        Print out the simulation parameters for the given dataset.
-        If act is [], simulation parameters for all activities will be output.
-        """
-
-        # change pathlib to WindowsPath to avoid error
-        temp = pathlib.PosixPath
-        pathlib.PosixPath = pathlib.WindowsPath
-
-        act_path = self.act_dir_list[Ndataset]
-        act_list = self.act_list[Ndataset] if len(act) == 0 else act
-
-        for activity in act_list:
-            # load pkl dictionary
-            act_idx = self.act_list[Ndataset].index(activity)
-            if activity in [0.02, 0.03, 0.2]:
-                activity = str(activity) + '0'
-            base_path = os.path.join(act_path[act_idx], f'zeta_{activity}_counter')
-
-            if os.path.isdir(base_path + '_0'):
-                dict_path = base_path + '_0'
-            elif os.path.isdir(base_path + '_10'):
-                dict_path = base_path + '_10'
-            elif os.path.isdir(base_path + '_20'):
-                dict_path = base_path + '_20'
-            else:
-                print(f"Parameter dictionary was not found for activity {activity}")
-                continue
-
-            dict_path = os.path.join(dict_path, 'model_params.pkl')
-   
-            with open(dict_path, 'rb') as f:
-                param_dict = pkl.load(f)
-
-            print(f"\nFor activity = {activity}:")
-            for key in param_keys:
-                try:
-                    print(f"{key}: {param_dict[key]}")
-                except:
-                    print(f"{key} not found in parameter dictionary.")
-        # reset pathlib
-        pathlib.PosixPath = temp
-        return
-
 
     def plot_av_defects(self, Ndataset = 0, fit_dict = {}, plot_density = True, verbose = False, use_merged = False):
         """
