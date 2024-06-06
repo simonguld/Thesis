@@ -82,7 +82,7 @@ class AnalyseDefectsMinimal:
             # load the convergence list if it exists
             try:
                 self.conv_list.append(np.loadtxt(os.path.join(output, 'conv_list.txt')).astype(int))
-                self.conv_list_err.append([0] * self.Nactivity[i])
+                self.conv_list_err.append(np.loadtxt(os.path.join(output, 'conv_list_err.txt')).astype(int))
             except:
                 self.conv_list.append([0] * self.Nactivity[i])
                 self.conv_list_err.append([0] * self.Nactivity[i])
@@ -118,8 +118,7 @@ class AnalyseDefectsMinimal:
             np.save(os.path.join(self.output_paths[Ndataset], save_name + '.npy'), output_arr)
         return output_arr if return_arr else None
 
-
-    def __plot_defects_per_activity(self, activity, Ndataset = 0, estimate_stationarity = False, stationarity_dict = {}):
+    def __plot_defects_per_activity(self, activity, Ndataset = 0, stationarity_dict = {}):
         
         output_path, Ndataset = self.__get_outpath_path(Ndataset, use_merged = False)
 
@@ -139,30 +138,27 @@ class AnalyseDefectsMinimal:
                            defect_arr_av[:, act_idx, 0], defect_arr_av[:, act_idx, 1], fmt='.', \
                             alpha = 0.15, markersize=9, label='Activity = {}'.format(activity),) 
 
-        if estimate_stationarity and stationarity_dict != {}:
+        if stationarity_dict != {}:
                 x = est_stationarity(defect_arr_av[:, act_idx, 0], **stationarity_dict)[0]
-        elif estimate_stationarity and stationarity_dict == {}:
-            print('No stationarity parameters given. Stationarity will not be estimated.')
-            x = self.conv_list[Ndataset][act_idx] * self.Ninfo[Ndataset]
         else:
-            x = self.conv_list[Ndataset][act_idx] * self.Ninfo[Ndataset]
-            print(x * self.Ninfo[Ndataset] )
+            x = self.conv_list[Ndataset][act_idx]
+            
+        x *= self.Ninfo[Ndataset]
+        print(x)
         if x > 0:
             ax.axvline(x, color='black', linestyle='--', alpha=0.5)
 
- 
+     #   xticks = np.round(np.linspace(0, Nframes * self.Ninfo[Ndataset], 20)).astype('int'), \
+      #         xticklabels = np.round(np.linspace(0, Nframes * self.Ninfo[Ndataset], 20)).astype('int'),
         ax.grid()
-
-        ax.set(xlabel = 'Time step', ylabel = f'{title}', xticks = np.round(np.linspace(0, Nframes * self.Ninfo[Ndataset], 20)).astype('int'), \
-               xticklabels = np.round(np.linspace(0, Nframes * self.Ninfo[Ndataset], 20)).astype('int'),
+        ax.set(xlabel = 'Time step', ylabel = f'{title}', 
                title = f'{title} for activity = {activity}',
                ylim = (0, np.max(defect_arr_av[:, act_idx, 0]) * 1.5))
 
         fig.tight_layout()
         return
 
-
-    def update_conv_list(self, Ndataset_list = None, estimate_stationarity = False, stationarity_dict = {}):
+    def update_conv_list(self, Ndataset_list = None, stationarity_dict = {}):
         if Ndataset_list is None:
             Ndataset_list = range(self.Ndata)
         
@@ -170,7 +166,7 @@ class AnalyseDefectsMinimal:
             act_list = self.act_list[i]
       
             for j in range(self.Nactivity[i]):
-                self.__plot_defects_per_activity(activity = act_list[j], Ndataset = i, estimate_stationarity = estimate_stationarity, stationarity_dict = stationarity_dict)
+                self.__plot_defects_per_activity(activity = act_list[j], Ndataset = i, stationarity_dict = stationarity_dict)
                 plt.show()
                 self.conv_list[i][j] = int(input(f'Enter the first frame to use for activity {self.act_list[i][j]}: '))
                 self.conv_list_err[i][j] = int(input(f'Enter the error for the first frame to use for activity {self.act_list[i][j]}: '))
@@ -209,7 +205,6 @@ class AnalyseDefectsMinimal:
         
         else:
             return defect_arr_av, av_defects
-
 
     def extract_results(self, save = True):
         """
@@ -305,8 +300,6 @@ class AnalyseDefectsMinimal:
             np.save(os.path.join(save_path, 'av_defects.npy'), av_defects)
         return
     
-
-
     def plot_av_defects(self, Ndataset = 0, fit_dict = {}, plot_density = True, verbose = False, use_merged = False):
         """
         fit_dict: dictionary containing the fit parameters with keys
@@ -394,15 +387,15 @@ class AnalyseDefectsMinimal:
 
             
             if estimate_stationarity and stationarity_dict != {}:
-                x = est_stationarity(defect_arr_av[:, act_idx, 0], **stationarity_dict)[0]
+                x = est_stationarity(defect_arr_av[:, act_idx, 0], **stationarity_dict)[0] * self.Ninfo[Ndataset]
             elif estimate_stationarity and stationarity_dict == {}:
                 print('No stationarity parameters given. Stationarity will not be estimated.')
-                x = self.conv_list[Ndataset][act_idx] - Nfirst_frame
+                x = self.conv_list[Ndataset][act_idx] - Nfirst_frame * self.Ninfo[Ndataset]
             else:
-                x = self.conv_list[Ndataset][act_idx] - Nfirst_frame
-            print(x * self.Ninfo[Ndataset] )
+                x = self.conv_list[Ndataset][act_idx] - Nfirst_frame * self.Ninfo[Ndataset]
+            print(x)
             if x > 0:
-                ax[i].axvline(x * self.Ninfo[Ndataset], color='black', linestyle='--', alpha=0.5)
+                ax[i].axvline(x,  color='black', linestyle='--', alpha=0.5)
             ax[i].set_ylim(0, np.max(defect_arr_av[:, act_idx, 0]) * 1.5)
 
         fig.suptitle(f'{title} for different activities (L = {self.LX[Ndataset]})' , fontsize=22, y = 1)
