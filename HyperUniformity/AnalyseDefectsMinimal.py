@@ -46,6 +46,7 @@ class AnalyseDefectsMinimal:
         self.act_list = []
         self.act_dir_list = []
         self.conv_list = []
+        self.conv_list_err = []
         
         self.Ndata = len(input_list)
 
@@ -81,8 +82,10 @@ class AnalyseDefectsMinimal:
             # load the convergence list if it exists
             try:
                 self.conv_list.append(np.loadtxt(os.path.join(output, 'conv_list.txt')).astype(int))
+                self.conv_list_err.append([0] * self.Nactivity[i])
             except:
                 self.conv_list.append([0] * self.Nactivity[i])
+                self.conv_list_err.append([0] * self.Nactivity[i])
 
     def __get_outpath_path(self, Ndataset = 0, use_merged = False):
 
@@ -116,8 +119,50 @@ class AnalyseDefectsMinimal:
         return output_arr if return_arr else None
 
 
+    def __plot_defects_per_activity(self, activity, Ndataset = 0, estimate_stationarity = False, stationarity_dict = {}):
+        
+        output_path, Ndataset = self.__get_outpath_path(Ndataset, use_merged = False)
 
-    def update_conv_list(self, Ndataset_list = None):
+        act_idx = self.act_list[Ndataset].index(activity)   
+        Nframes = self.Nframes[Ndataset]
+
+        try:
+            defect_arr_av = self.get_arrays_av(Ndataset = Ndataset)[0] 
+        except:
+            print('Defect array not found. Analyse defects first.')
+            return
+
+        title = 'Defect count'
+        fig, ax = plt.subplots(figsize=(12, 6))
+
+        ax.errorbar(np.arange(0, Nframes * self.Ninfo[Ndataset], self.Ninfo[Ndataset]), \
+                           defect_arr_av[:, act_idx, 0], defect_arr_av[:, act_idx, 1], fmt='.', \
+                            alpha = 0.15, markersize=9, label='Activity = {}'.format(activity),) 
+
+        if estimate_stationarity and stationarity_dict != {}:
+                x = est_stationarity(defect_arr_av[:, act_idx, 0], **stationarity_dict)[0]
+        elif estimate_stationarity and stationarity_dict == {}:
+            print('No stationarity parameters given. Stationarity will not be estimated.')
+            x = self.conv_list[Ndataset][act_idx] * self.Ninfo[Ndataset]
+        else:
+            x = self.conv_list[Ndataset][act_idx] * self.Ninfo[Ndataset]
+            print(x * self.Ninfo[Ndataset] )
+        if x > 0:
+            ax.axvline(x, color='black', linestyle='--', alpha=0.5)
+
+ 
+        ax.grid()
+
+        ax.set(xlabel = 'Time step', ylabel = f'{title}', xticks = np.round(np.linspace(0, Nframes * self.Ninfo[Ndataset], 20)).astype('int'), \
+               xticklabels = np.round(np.linspace(0, Nframes * self.Ninfo[Ndataset], 20)).astype('int'),
+               title = f'{title} for activity = {activity}',
+               ylim = (0, np.max(defect_arr_av[:, act_idx, 0]) * 1.5))
+
+        fig.tight_layout()
+        return
+
+
+    def update_conv_list(self, Ndataset_list = None, estimate_stationarity = False, stationarity_dict = {}):
         if Ndataset_list is None:
             Ndataset_list = range(self.Ndata)
         
@@ -125,12 +170,14 @@ class AnalyseDefectsMinimal:
             act_list = self.act_list[i]
       
             for j in range(self.Nactivity[i]):
-                fig, ax = self.plot_defects_per_activity(Ndataset = i, act_idx_bounds=[j, j + 1], update_conv = True, plot_density = False)
+                self.__plot_defects_per_activity(activity = act_list[j], Ndataset = i, estimate_stationarity = estimate_stationarity, stationarity_dict = stationarity_dict)
                 plt.show()
                 self.conv_list[i][j] = int(input(f'Enter the first frame to use for activity {self.act_list[i][j]}: '))
+                self.conv_list_err[i][j] = int(input(f'Enter the error for the first frame to use for activity {self.act_list[i][j]}: '))
 
             # save the convergence list
             np.savetxt(os.path.join(self.output_paths[i], 'conv_list.txt'), self.conv_list[i])
+            np.savetxt(os.path.join(self.output_paths[i], 'conv_list_err.txt'), self.conv_list_err[i])
         return
 
     def get_arrays_full(self, Ndataset = 0,):
