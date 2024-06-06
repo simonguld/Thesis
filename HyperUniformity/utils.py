@@ -740,6 +740,34 @@ def extract_clustering_results(Nframes, act_list, act_dir_list, Nexp, Ncmin=2, s
 
 ### Functions for statistical analysis ------------------------------------------------
 
+
+def est_stationarity(time_series, interval_len, Njump, Nconverged, max_sigma_dist = 2):
+ 
+    # Estimate the stationarity of a time series by calculating the mean and standard deviation
+    # of the time series in intervals of length interval_len. If the mean of a block is sufficiently
+    # close to the mean of the entire time series, then the block is considered stationary.
+
+    Nframes = len(time_series)
+    Nblocks = int(Nframes / interval_len)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        converged_mean = np.nanmean(time_series[Nconverged:])
+        global_std = np.nanstd(time_series[Nconverged:], ddof = 1)
+
+    it = 0
+    while it * Njump < Nframes - interval_len:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            mean_block = np.nanmean(time_series[it * Njump: it * Njump + interval_len])
+        dist_from_mean = np.abs(mean_block - converged_mean) / global_std
+
+        if  dist_from_mean > max_sigma_dist:
+            it += 1
+        else:
+            return it * Njump + int(interval_len / 2), True
+    return it * Njump + int(interval_len / 2), False
+
+
 def get_statistics_from_fit(fitting_object, Ndatapoints, subtract_1dof_for_binning = False):
     
     Nparameters = len(fitting_object.values[:])

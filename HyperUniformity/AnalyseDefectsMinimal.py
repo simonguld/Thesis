@@ -13,6 +13,7 @@ import pathlib
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import ticker
+from sklearn.metrics import ndcg_score
 
 from utils import *
 from plot_utils import *
@@ -121,9 +122,11 @@ class AnalyseDefectsMinimal:
             Ndataset_list = range(self.Ndata)
         
         for i in Ndataset_list:
-            fig, ax = self.plot_defects_per_activity(Ndataset = i, plot_density = False)
-            plt.show()
+            act_list = self.act_list[i]
+      
             for j in range(self.Nactivity[i]):
+                fig, ax = self.plot_defects_per_activity(Ndataset = i, act_idx_bounds=[j, j + 1], update_conv = True, plot_density = False)
+                plt.show()
                 self.conv_list[i][j] = int(input(f'Enter the first frame to use for activity {self.act_list[i][j]}: '))
 
             # save the convergence list
@@ -311,7 +314,7 @@ class AnalyseDefectsMinimal:
         return fig, ax
         
     def plot_defects_per_activity(self, Ndataset = 0, Nfirst_frame = 0, act_idx_bounds = None,\
-                                   act_max_idx = None, plot_density = False, use_merged = False, save = False):
+                                   update_conv = False, estimate_stationarity = False, stationarity_dict = {}, plot_density = False, use_merged = False, save = False):
         
         output_path, Ndataset = self.__get_outpath_path(Ndataset, use_merged)
 
@@ -328,11 +331,11 @@ class AnalyseDefectsMinimal:
             print('Defect array not found. Analyse defects first.')
             return
 
-        ncols = 4
+        ncols = 1 if update_conv else 4
         nrows = int(np.ceil(len(activities) / ncols))
         title = 'Defect density' if plot_density else 'Defect count'
         height = nrows * 3
-        fig, ax = plt.subplots(nrows = nrows, ncols = ncols, figsize=(16,height))
+        fig, ax = plt.subplots(nrows = nrows, ncols = ncols, figsize=(12,height))
         ax = ax.flatten()  
 
         for i, act in enumerate(activities):
@@ -342,10 +345,17 @@ class AnalyseDefectsMinimal:
                             alpha = 0.15, markersize=9, label='Activity = {}'.format(act),) 
             ax[i].text(0.6, 0.2, rf'$\zeta$ = {act}', transform=ax[i].transAxes, fontsize=14, verticalalignment='top')
 
-            # plot vertical lines to indicate the start of the averaging
-            x=self.conv_list[Ndataset][i + act_idx_bounds[0]] - Nfirst_frame
+            
+            if estimate_stationarity and stationarity_dict != {}:
+                x = est_stationarity(defect_arr_av[:, act_idx, 0], **stationarity_dict)[0]
+            elif estimate_stationarity and stationarity_dict == {}:
+                print('No stationarity parameters given. Stationarity will not be estimated.')
+                x = self.conv_list[Ndataset][act_idx] - Nfirst_frame
+            else:
+                x = self.conv_list[Ndataset][act_idx] - Nfirst_frame
+            print(x * self.Ninfo[Ndataset] )
             if x > 0:
-                ax[i].axvline(x=self.conv_list[Ndataset][i + act_idx_bounds[0]], color='black', linestyle='--', alpha=0.5)
+                ax[i].axvline(x * self.Ninfo[Ndataset], color='black', linestyle='--', alpha=0.5)
             ax[i].set_ylim(0, np.max(defect_arr_av[:, act_idx, 0]) * 1.5)
 
         fig.suptitle(f'{title} for different activities (L = {self.LX[Ndataset]})' , fontsize=22, y = 1)
@@ -368,7 +378,7 @@ class AnalyseDefectsMinimal:
             activities = self.act_list[Ndataset][act_idx_bounds[0]:act_idx_bounds[1]]
             norm = self.LX[Ndataset] ** 2 if plot_density else 1
             try:
-                defect_arr = self.get_arrays_full(Ndataset = Ndataset)[0] / norm
+                defect_arr = self.get_arrays_full(Ndataset = Ndataset) / norm
             except:
                 print('Defect array not found. Analyse defects first.')
                 return
@@ -382,7 +392,7 @@ class AnalyseDefectsMinimal:
             for i, act in enumerate(activities):
                 fig, ax = plt.subplots(nrows = nrows, ncols = ncols, figsize=(16, height))
                 ax = ax.flatten()  
-                defect_arr_act = (defect_arr[:, i, :] / norm).astype(float)
+                defect_arr_act = (defect_arr[:, i + act_idx_bounds[0], :] / norm).astype(float)
                 mini, maxi = np.nanmin(defect_arr_act) * 0.5, np.nanmax(defect_arr_act) * 1.3
 
                 for j in np.arange(self.Nexp[Ndataset]):
