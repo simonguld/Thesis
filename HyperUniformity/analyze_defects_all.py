@@ -62,7 +62,7 @@ def main():
     do_merge = True
 
     system_size_list = [256, 512, 1024, 2048]
-   #system_size_list = [2048]
+    system_size_list = [2048]
     mode = 'all' # 'all' or 'short'
 
     # order parameter parameters

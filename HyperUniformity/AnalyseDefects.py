@@ -999,7 +999,7 @@ class AnalyseDefects:
         Nframes = self.Nframes[Ndataset] - Nfirst_frame
 
         try:
-            defect_arr_av = self.get_arrays_av(Ndataset = Ndataset)[0] / norm
+            defect_arr_av = self.get_arrays_av(Ndataset = Ndataset, use_merged = use_merged)[0] / norm
         except:
             print('Defect array not found. Analyse defects first.')
             return
@@ -1221,10 +1221,10 @@ class AnalyseDefects:
     
             fig, ax = plt.subplots(figsize=(9, 6))
 
-            if 'fluc' in include:
-                act_list_fluc = act_list # np.load(os.path.join(output_path, f'act_list_alpha_fit.npy'))
-            if len(set(include).difference(set(['fluc']))) > 0:
-                act_list_sfac = act_list # np.load(os.path.join(output_path, f'act_list_alpha_fit_sfac.npy'))
+          #  if 'fluc' in include:
+          #      act_list_fluc = act_list # np.load(os.path.join(output_path, f'act_list_alpha_fit.npy'))
+          #  if len(set(include).difference(set(['fluc']))) > 0:
+          #      act_list_sfac = act_list # np.load(os.path.join(output_path, f'act_list_alpha_fit_sfac.npy'))
     
             for i, file_name in enumerate(file_name_list):
                 try:
@@ -1233,7 +1233,7 @@ class AnalyseDefects:
                     print(f'File {file_name} not found.')
                     continue
 
-                act_list = act_list_fluc if act_list_to_use[i] == 0 else act_list_sfac
+               # act_list = act_list_fluc if act_list_to_use[i] == 0 else act_list_sfac
                 alpha_std = alpha_list[:, 1] if alpha_list.shape[1] == 2 else alpha_list[:, 2]
   
                 ax.errorbar(act_list, alpha_list[:, 0], alpha_std, fmt = '.-', capsize=2, label = label_list[i], \
