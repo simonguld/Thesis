@@ -374,7 +374,7 @@ class AnalyseDefects:
             return
         return binder_cumulants, susceptibility, order_param
 
-    def get_sfac_pcf(self, Ndataset = 0, time_av = True, weighted = True, use_merged = False):
+    def get_sfac_pcf(self, Ndataset = 0, time_av = True, weighted = False, use_merged = False):
         """
         returns kbins, sfac_av, rad, pcf_av
         """
@@ -754,7 +754,7 @@ class AnalyseDefects:
                                               act_idx_bounds = act_idx_bounds, use_merged = use_merged)
         return fit_params, stat_arr
 
-    def analyze_sfac_time_av(self, Ndataset = 0, Npoints_bounds = [3,8], act_idx_bounds = None, weighted = True, use_merged = False, save = True, plot = True):
+    def analyze_sfac_time_av(self, Ndataset = 0, Npoints_bounds = [3,8], act_idx_bounds = None, weighted = False, use_merged = False, save = True, plot = True):
         """
         returns fit_params_time_av
         """
@@ -858,7 +858,7 @@ class AnalyseDefects:
             fig.tight_layout()
         return fit_params_sfac_time_av
     
-    def analyze_sfac(self, Ndataset = 0, Npoints_bounds = [3,8], weighted = True, act_idx_bounds = None, use_merged = False, save = True, plot = True):
+    def analyze_sfac(self, Ndataset = 0, Npoints_bounds = [3,8], weighted = False, act_idx_bounds = None, use_merged = False, save = True, plot = True):
     
         suffix = '' if weighted else '_unweighted'
         output_path, Ndataset = self.__get_outpath_path(Ndataset, use_merged)
@@ -882,7 +882,7 @@ class AnalyseDefects:
 
         fit_params = np.zeros([self.Nframes[Ndataset], len(act_list), 2 * Nparams]) * np.nan
         alpha_list = np.zeros([len(act_list), 2]) * np.nan
-
+        
         for i, act in enumerate(act_list):
             for frame in range(self.conv_list[Ndataset][i], self.Nframes[Ndataset]):
                 s_av = sfac_av[frame, :, i, 0]
@@ -911,7 +911,8 @@ class AnalyseDefects:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
                     fit_params[frame, i, :Nparams] = np.nanmean(fit_vals, axis = 0)
-                    fit_params[frame, i, Nparams:] = np.nanstd(fit_vals, axis = 0) / np.sqrt(Npoints_bounds[1] - Npoints_bounds[0])
+                    nan_fits = np.isnan(fit_vals[:,0]).sum()
+                    fit_params[frame, i, Nparams:] = np.nanstd(fit_vals, axis = 0) / np.sqrt(Npoints_bounds[1] - Npoints_bounds[0] - nan_fits)
 
             try:
                 with warnings.catch_warnings():
@@ -1039,13 +1040,11 @@ class AnalyseDefects:
     def plot_defects_per_exp(self, Ndataset = 0, act_idx_bounds = None, plot_density = False):
 
         try:
-
             act_idx_bounds = [0, len(self.act_list[Ndataset])] if act_idx_bounds is None else act_idx_bounds
             activities = self.act_list[Ndataset][act_idx_bounds[0]:act_idx_bounds[1]]
             norm = self.LX[Ndataset] ** 2 if plot_density else 1
-
             try:
-                defect_arr = self.get_arrays_full(Ndataset = Ndataset)[0] / norm
+                defect_arr = self.get_arrays_full(Ndataset = Ndataset)[0]
             except:
                 print('Defect array not found. Analyse defects first.')
                 return
@@ -1053,7 +1052,47 @@ class AnalyseDefects:
             ncols = 4
             nrows = int(np.ceil(self.Nexp[Ndataset] / ncols))
             height = nrows * 3
+            title = 'Defect density' if plot_density else 'Defect count'
+
+            for i, act in enumerate(activities):
+                fig, ax = plt.subplots(nrows = nrows, ncols = ncols, figsize=(16, height))
+                ax = ax.flatten()  
+                defect_arr_act = (defect_arr[:, i + act_idx_bounds[0], :] / norm).astype(float)
+                mini, maxi = np.nanmin(defect_arr_act) * 0.5, np.nanmax(defect_arr_act) * 1.3
+
+                for j in np.arange(self.Nexp[Ndataset]):
+                    ax[j].plot(np.arange(self.Nframes[Ndataset]), defect_arr_act[:, j], '.', label='Exp = {}'.format(j), alpha = 0.5)
+                    ax[j].legend()  
+                    ax[j].set_ylim(mini, maxi)
+
+                fig.suptitle(f'{title} for activity = {act}' , fontsize=18)
+                fig.supxlabel('Time step', fontsize=18)
+                fig.supylabel(f'{title}', fontsize=18)
+                fig.tight_layout()
+                plt.show()
+        except:
+            raise KeyboardInterrupt
+
+
+
+    def plot_defects_per_exp_old(self, Ndataset = 0, act_idx_bounds = None, plot_density = False):
+
+        try:
+
+            act_idx_bounds = [0, len(self.act_list[Ndataset])] if act_idx_bounds is None else act_idx_bounds
+            activities = self.act_list[Ndataset][act_idx_bounds[0]:act_idx_bounds[1]]
             norm = self.LX[Ndataset] ** 2 if plot_density else 1
+
+            try:
+                defect_arr = self.get_arrays_full(Ndataset = Ndataset)[0]
+            except:
+                print('Defect array not found. Analyse defects first.')
+                return
+
+            ncols = 4
+            nrows = int(np.ceil(self.Nexp[Ndataset] / ncols))
+            height = nrows * 3
+            #norm = self.LX[Ndataset] ** 2 if plot_density else 1
             title = 'Defect density' if plot_density else 'Defect count'
 
             for i, act in enumerate(activities):
@@ -1074,6 +1113,7 @@ class AnalyseDefects:
                 plt.show()
         except:
             raise KeyboardInterrupt
+
 
     def plot_hyperuniformity_exp_all(self, fit_params = None, stat_arr = None, Ndataset = 0, act_idx_bounds = None, use_merged = False):
 
@@ -1165,10 +1205,10 @@ class AnalyseDefects:
             'all': include all fits
             'fluc': include only fits based on fluctuations
             'sfac_all': include all fits with structure factor
-            'sfac_time_av': include only fits with time averaged structure factor
-            'sfac_av': include only fits with spatially averaged structure factor   
-            'sfac_time_av_unweighted': include only fits with time averaged structure factor, unweighted
-            'sfac_av_unweighted': include only fits with spatially averaged structure factor, unweighted
+            'sfac_time_av': include only fits with time averaged structure factor (fit of time av)
+            'sfac_av': include only fits with spatially averaged structure factor   (time av of fits)
+            'sfac_time_av_unweighted': include only fits with time averaged structure factor, unweighted  (fit of time av)
+            'sfac_av_unweighted': include only fits with spatially averaged structure factor, unweighted (time av of fits)
             """
 
             suffix = 'dens' if use_density_fit else 'count'
@@ -1243,7 +1283,7 @@ class AnalyseDefects:
             ax.set_xlabel(r'$\zeta$')
             ax.set_ylabel(rf'$\langle\alpha \rangle$')
             ax.set_title(rf'Time av. of $\alpha $ vs activity (L = {self.LX[Ndataset]})')
-            ax.set_ylim(bottom = -.2)
+           # ax.set_ylim(bottom = -.2)
             fig.tight_layout()
             
             if save:
@@ -1291,7 +1331,7 @@ class AnalyseDefects:
         fig.tight_layout()
         return fig, ax
 
-    def plot_hyperuniformity_sfac(self, act_list = None, fit_params = None, Ndataset = 0, weighted = True, act_idx_bounds = None, use_merged = False, save = False):
+    def plot_hyperuniformity_sfac(self, act_list = None, fit_params = None, Ndataset = 0, weighted = False, act_idx_bounds = None, use_merged = False, save = False):
 
         
         output_path, Ndataset = self.__get_outpath_path(Ndataset, use_merged)

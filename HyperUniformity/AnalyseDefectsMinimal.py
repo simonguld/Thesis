@@ -399,7 +399,7 @@ class AnalyseDefectsMinimal:
             ax[i].set_ylim(0, np.max(defect_arr_av[:, act_idx, 0]) * 1.5)
 
         fig.suptitle(f'{title} for different activities (L = {self.LX[Ndataset]})' , fontsize=22, y = 1)
-        fig.supxlabel('Frame', fontsize=20, y = 0)
+        fig.supxlabel('Time step', fontsize=20, y = 0)
         fig.supylabel(f'{title}', fontsize=20, x=0)
         fig.tight_layout()
 
@@ -441,7 +441,7 @@ class AnalyseDefectsMinimal:
                     ax[j].set_ylim(mini, maxi)
 
                 fig.suptitle(f'{title} for activity = {act}' , fontsize=18)
-                fig.supxlabel('Frame', fontsize=18)
+                fig.supxlabel('Time step', fontsize=18)
                 fig.supylabel(f'{title}', fontsize=18)
                 fig.tight_layout()
                 plt.show()
