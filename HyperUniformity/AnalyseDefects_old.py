@@ -178,7 +178,7 @@ class AnalyseDefects:
                 np.save(os.path.join(self.output_paths[N], 'pcf_time_av.npy'), pcf_time_av)
         return
 
-    def calc_binder_susceptibility_old(self, Ndataset = 0, order_param_func = None, Nscale = True, \
+    def calc_binder_susceptibility(self, Ndataset = 0, order_param_func = None, Nscale = True, \
                                    return_order_param = False, save = True):
 
         act_list = self.act_list[Ndataset]
@@ -251,82 +251,6 @@ class AnalyseDefects:
         else:
             return sus, binder_cumulants
    
-    def calc_binder_susceptibility(self, Ndataset = 0, Nframes = None, order_param_func = None, Nscale = True, \
-                                return_order_param = False, save = True):
-
-        act_list = self.act_list[Ndataset]
-        conv_list = self.conv_list[Ndataset]
-        output_path = self.output_paths[Ndataset]
-        Nact = len(act_list)
-
-        av_def = self.get_arrays_av(Ndataset = Ndataset)[-1]
-        def_arr = self.get_arrays_full(Ndataset = Ndataset)[0]
-
-        if order_param_func is None:
-            order_param = def_arr
-        else:
-            order_param = order_param_func(def_arr, av_def, self.LX[Ndataset])
-        
-        # Initialize arrays
-        binder_cumulants = np.zeros((Nact, 2)) * np.nan
-        sus = np.nan * np.zeros_like(binder_cumulants)
-        order_param_av = np.nan * np.zeros((*order_param.shape[:-1], 2))
-
-        p4 = order_param ** 4
-        p2 = order_param ** 2
-
-        p4_av = np.zeros_like(binder_cumulants)
-        p2_av = np.zeros_like(binder_cumulants)
-
-        for i, act in enumerate(act_list):
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=RuntimeWarning)
-
-                Nfirst_frame = conv_list[i] if Nframes is None else max(def_arr.shape[0] - Nframes, conv_list[i])
-
-                # calculate the average and standard deviation of p4 and p2
-                Npoints = p4[Nfirst_frame:,i,:].size
-                p4_av[i, 0] = np.nanmean(np.nanmean(p4[Nfirst_frame:,i,:]))
-                p2_av[i, 0] = np.nanmean(np.nanmean(p2[Nfirst_frame:,i,:]))
-                p4_av[i, 1] = np.nanstd(p4[Nfirst_frame:,i,:]) / np.sqrt(Npoints)
-                p2_av[i, 1] = np.nanstd(p2[Nfirst_frame:,i,:]) / np.sqrt(Npoints)
-            
-                # calculate the order parameter
-                order_param_av[Nfirst_frame:, i, 0] = np.nanmean(order_param[Nfirst_frame:, i, :], axis = -1)
-                order_param_av[Nfirst_frame:, i, 1] = np.nanstd(order_param[Nfirst_frame:, i, :], axis = -1) / np.sqrt(self.Nframes[Ndataset] - Nfirst_frame)
-
-                # calculate the susceptibility for each experiment and average over them
-                var_per_exp = np.nanmean(order_param[Nfirst_frame:, i, :] ** 2, axis = 0) - np.nanmean(order_param[Nfirst_frame:, i, :], axis = 0) ** 2
-                #sus[i, 0] = np.nanmean(var_per_exp) 
-
-                sus[i,0] = np.nanmean(order_param[Nfirst_frame:, i, :] ** 2,) - np.nanmean(order_param[Nfirst_frame:, i, :]) ** 2
-                #  sus[i, 1] = np.nanstd(var_per_exp) / np.sqrt(self.Nexp[Ndataset])
-
-        # calculate binder cumulants
-        binder_cumulants[:,0] = 1 - p4_av[:, 0] / (3 * p2_av[:, 0] ** 2)
-
-        # find the error in the binder cumulant
-        dzdx = lambda x, y: - 1 / (3 * y ** 2)
-        dzdy = lambda x, y: 2 * x / (3 * y ** 3)
-
-        correlation = calc_corr_matrix(np.array([p4_av[:,0], p2_av[:,0]]).T)[0,1]
-        binder_cumulants[:,1] = prop_err(dzdx, dzdy, p4_av[:,0], p2_av[:,0], p4_av[:,1], p2_av[:,1], correlation = correlation)
-
-
-        if Nscale:
-            sus *= av_def[:, 0][:, None]
-
-        if save:
-            np.save(os.path.join(output_path, 'susceptibility.npy'), sus)
-            np.save(os.path.join(output_path, 'binder_cumulants.npy'), binder_cumulants)
-            np.save(os.path.join(output_path, 'order_param_av.npy'), order_param_av)
-
-        if return_order_param:
-            return sus, binder_cumulants, order_param_av
-        else:
-            return sus, binder_cumulants
-    
-
     def print_params(self, Ndataset = 0, act = [], param_keys = ['nstart', 'nsteps']):
         """
         Print out the simulation parameters for the given dataset.
@@ -1041,8 +965,8 @@ class AnalyseDefects:
         fig, ax = plt.subplots(figsize=(9, 6))
         ax.errorbar(self.act_list[Ndataset], av_defects[:, 0], yerr = av_defects[:, 1], fmt = 'k.', elinewidth=1.5, capsize=1.5, capthick=1, markersize = 4)
         
-        ax.set_xlabel(r'Activity ($\zeta$)')
-        ax.set_ylabel(r' Av. defect density ($\overline{\rho}$')
+        ax.set_xlabel(r'$\zeta$')
+        ax.set_ylabel(r'$\langle \rho \rangle$')
         ax.set_title('Average defect density vs. activity')
 
         if do_fit:
@@ -1100,7 +1024,7 @@ class AnalyseDefects:
                 ax[i].axvline(x=self.conv_list[Ndataset][i + act_idx_bounds[0]], color='black', linestyle='--', alpha=0.5)
             ax[i].set_ylim(0, np.max(defect_arr_av[:, act_idx, 0]) * 1.5)
 
-        fig.suptitle(f'{title} for different activities (L = {self.LX[Ndataset]})' , fontsize=22, y = .995)
+        fig.suptitle(f'{title} for different activities (L = {self.LX[Ndataset]})' , fontsize=22, y = 1)
         fig.supxlabel('Frame', fontsize=20, y = 0)
         fig.supylabel(f'{title}', fontsize=20, x=0)
         fig.tight_layout()
@@ -1108,7 +1032,7 @@ class AnalyseDefects:
         if save:
             if not os.path.isdir(os.path.join(output_path, 'figs')):
                 os.makedirs(os.path.join(output_path, 'figs'))
-            fig.savefig(os.path.join(output_path, f'figs\\defects_per_activity.png'), dpi = 420, pad_inches=0.2)
+            fig.savefig(os.path.join(output_path, f'figs\\defects_per_activity.png'), dpi = 420, pad_inches=0.15)
 
         plt.show()
         return fig, ax
@@ -1148,6 +1072,48 @@ class AnalyseDefects:
                 plt.show()
         except:
             raise KeyboardInterrupt
+
+
+
+    def plot_defects_per_exp_old(self, Ndataset = 0, act_idx_bounds = None, plot_density = False):
+
+        try:
+
+            act_idx_bounds = [0, len(self.act_list[Ndataset])] if act_idx_bounds is None else act_idx_bounds
+            activities = self.act_list[Ndataset][act_idx_bounds[0]:act_idx_bounds[1]]
+            norm = self.LX[Ndataset] ** 2 if plot_density else 1
+
+            try:
+                defect_arr = self.get_arrays_full(Ndataset = Ndataset)[0]
+            except:
+                print('Defect array not found. Analyse defects first.')
+                return
+
+            ncols = 4
+            nrows = int(np.ceil(self.Nexp[Ndataset] / ncols))
+            height = nrows * 3
+            #norm = self.LX[Ndataset] ** 2 if plot_density else 1
+            title = 'Defect density' if plot_density else 'Defect count'
+
+            for i, act in enumerate(activities):
+                fig, ax = plt.subplots(nrows = nrows, ncols = ncols, figsize=(16, height))
+                ax = ax.flatten()  
+                defect_arr_act = (defect_arr[:, i, :] / norm).astype(float)
+                mini, maxi = np.nanmin(defect_arr_act) * 0.5, np.nanmax(defect_arr_act) * 1.3
+
+                for j in np.arange(self.Nexp[Ndataset]):
+                    ax[j].plot(np.arange(self.Nframes[Ndataset]), defect_arr_act[:, j], '.', label='Exp = {}'.format(j), alpha = 0.5)
+                    ax[j].legend()  
+                    ax[j].set_ylim(mini, maxi)
+
+                fig.suptitle(f'{title} for activity = {act}' , fontsize=18)
+                fig.supxlabel('Frame', fontsize=18)
+                fig.supylabel(f'{title}', fontsize=18)
+                fig.tight_layout()
+                plt.show()
+        except:
+            raise KeyboardInterrupt
+
 
     def plot_hyperuniformity_exp_all(self, fit_params = None, stat_arr = None, Ndataset = 0, act_idx_bounds = None, use_merged = False):
 
@@ -1227,7 +1193,7 @@ class AnalyseDefects:
            
         suptitle = fig.suptitle(f'Hyperuniformity exponent for different activities (L = {self.LX[Ndataset]})', y=1.05)
         fig.supxlabel('Frame')
-        fig.supylabel(r'$\alpha$ (est. using $\overline{\delta \rho ^2}$)')
+        fig.supylabel(rf'$\alpha$ (est. using $\langle \delta \rho ^2 \rangle$)')
         fig.legend(ncol=4, fontsize = 13,bbox_to_anchor=(0.75, 1.01))
         fig.tight_layout()
         return fig, ax
@@ -1262,13 +1228,13 @@ class AnalyseDefects:
             if 'all' in include:
                 file_name_list = [fluc_path, sfac_path, sfac_time_av_path, sfac_unweighted_path, sfac_time_av_unweighted_path]
                 act_list_to_use = [0, 1, 1, 1, 1]
-                label_list = [r'$\overline{\delta \rho ^2}$ (time av. of fits)', rf'$S_W(k)$ (time av. of fits)', rf'$S_W(k)$ (fit of time av.)', rf'$S_U(k)$ (time av. of fits)', rf'$S_U(k)$ (fit of time av.)']
+                label_list = [rf'$\langle \delta \rho ^2 \rangle$ (time av. of fits)', rf'$S_W(k)$ (time av. of fits)', rf'$S_W(k)$ (fit of time av.)', rf'$S_U(k)$ (time av. of fits)', rf'$S_U(k)$ (fit of time av.)']
             else:
                 for val in include:
                     if val == 'fluc':
                         file_name_list.append(fluc_path)
                         act_list_to_use.append(0)
-                        label_list.append(r'$\overline{\delta \rho ^2}$ (time av. of fits)')
+                        label_list.append(rf'$\langle \delta \rho ^2 \rangle$ (time av. of fits)')
                     elif val == 'sfac_all':
                         file_name_list.extend([sfac_path, sfac_time_av_path, sfac_unweighted_path, sfac_time_av_unweighted_path])
                         act_list_to_use.extend([1, 1, 1, 1])
@@ -1295,6 +1261,11 @@ class AnalyseDefects:
     
             fig, ax = plt.subplots(figsize=(9, 6))
 
+          #  if 'fluc' in include:
+          #      act_list_fluc = act_list # np.load(os.path.join(output_path, f'act_list_alpha_fit.npy'))
+          #  if len(set(include).difference(set(['fluc']))) > 0:
+          #      act_list_sfac = act_list # np.load(os.path.join(output_path, f'act_list_alpha_fit_sfac.npy'))
+    
             for i, file_name in enumerate(file_name_list):
                 try:
                     alpha_list = np.load(file_name)
@@ -1309,8 +1280,8 @@ class AnalyseDefects:
                             capthick=1, elinewidth=1, markeredgewidth=2, alpha = 0.5, markersize=4,)
   
             ax.legend(ncol=2, fontsize=12)
-            ax.set_xlabel(r'Activity ($\zeta$)')
-            ax.set_ylabel(r'Hyperuniformity exponent ($\overline{\alpha}$)')
+            ax.set_xlabel(r'$\zeta$')
+            ax.set_ylabel(rf'$\langle\alpha \rangle$')
             ax.set_title(rf'Time av. of $\alpha $ vs activity (L = {self.LX[Ndataset]})')
            # ax.set_ylim(bottom = -.2)
             fig.tight_layout()
@@ -1343,8 +1314,8 @@ class AnalyseDefects:
         
         fig, ax = plt.subplots(2,2, figsize = (20, 20))
         ax = ax.flatten()
-        ax[0].errorbar(act_list, sus[:,0], sus[:,1], marker = 'o', alpha=.3,) # label = r'$\chi(\zeta)$ = \langle N_d (\zeta) \rangle \langle \delta \psi^2 \rangle $')
-        ax[1].errorbar(act_list, binder[:,0], binder[:,1], marker = 'o', alpha=.3,) # label=r'$U_B(\zeta) = 1 - \frac{\langle \psi^4 \rangle}{3 \langle \psi^2 \rangle ^2}$')
+        ax[0].errorbar(act_list, sus[:,0], sus[:,1], marker = 'o', alpha=.3, label = r'$\chi(\zeta)$ = \langle N_d (\zeta) \rangle \langle \delta \psi^2 \rangle $')
+        ax[1].errorbar(act_list, binder[:,0], binder[:,1], marker = 'o', alpha=.3, label=r'$U_B(\zeta) = 1 - \frac{\langle \psi^4 \rangle}{3 \langle \psi^2 \rangle ^2}$')
         ax[2].errorbar(act_list, sus[:,0] / sus[act_idx_max,0], sus[:,1] / sus[act_idx_max,0], marker = 'o', alpha=.3)
         ax[3].errorbar(act_list, order_param_time_av, order_param_time_av_std, label = rf'{order_param_string}', marker = 'o', alpha=.3)
 
@@ -1421,16 +1392,17 @@ class AnalyseDefects:
            
 
         title_suffix = 'Weighted' if weighted else 'Unweighted'
-        suptitle = fig.suptitle(f'Hyperuniformity exponent for different activities (L = {self.LX[Ndataset]})', y=.995)
+        suptitle = fig.suptitle(f'Hyperuniformity exponent for different activities (L = {self.LX[Ndataset]})', y=1.02)
         fig.supxlabel('Frame')
-        fig.supylabel(rf'$\alpha$ (est. from $S(k)$ ({title_suffix}))', x = 0.005)
-        fig.legend(ncol=2)
+        fig.supylabel(rf'$\alpha$ (est. from $S(k)$ ({title_suffix}))', x = 0.05)
+        fig.legend(ncol=4, fontsize = 13,bbox_to_anchor=(0.6, 1.0025))
         fig.tight_layout()
 
         if save:    
             if not os.path.isdir(os.path.join(output_path, 'figs')):
                 os.makedirs(os.path.join(output_path, 'figs'))
-            fig.savefig(os.path.join(output_path, f'figs\\alpha_sfac{suffix}.png'), dpi = 420)
+            fig.savefig(os.path.join(output_path, f'figs\\alpha_sfac{suffix}.png'), dpi = 420, pad_inches=0.15, bbox_extra_artists=[suptitle])
+
         return fig, ax
 
     def plot_sfac_weighted_vs_unweighted(self, Ndataset = 0, Npoints_to_fit = 5, act_idx_bounds = None, use_merged = False, save = False):
@@ -1519,7 +1491,7 @@ class AnalyseDefects:
 
         fig.suptitle(fr'Time av. structure factor different activities (L = {self.LX[Ndataset]})', y=1.03)
         fig.supxlabel(r'$|k|$')
-        fig.supylabel(r'$\overline{S(k)}$', x = 0)
+        fig.supylabel(rf'$\langle S(k) \rangle $', x = 0)
         fig.legend(ncol=8, fontsize = 14, bbox_to_anchor=(0.98, 1.0))
         fig.tight_layout()
 
@@ -1600,7 +1572,7 @@ class AnalyseDefects:
         min_val = min(min_vals)
 
         xticks = np.array([2.5, 5, 7.5, 10]) * self.LX[Ndataset] / 100
-        ax.set(xlabel = 'Window size (1/sys. size)', ylabel = r'$\overline{\delta \rho ^2} ~/~ (\overline{\delta \rho})^2$',\
+        ax.set(xlabel = 'Window size (1/sys. size)', ylabel = r'$\langle \delta \rho ^2 \rangle /  \langle \rho \rangle ^2$',\
                yscale = 'log', xscale = 'log', ylim = (0.005, 100), xticks = xticks, xticklabels = np.round(xticks / self.LX[Ndataset],3))
 
         ax.get_xaxis().set_major_formatter(ticker.ScalarFormatter())
@@ -1614,7 +1586,6 @@ class AnalyseDefects:
                 os.makedirs(os.path.join(output_path, 'figs'))
             fig.savefig(os.path.join(output_path, f'figs\\dens_fluc_time_av.png'), dpi = 420, pad_inches=0.25)       
         return fig, ax
-
 
 
 
@@ -1640,6 +1611,7 @@ def gen_analysis_dict(LL, mode):
     
     return defect_list
 
+
 def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False):
 
     if isinstance(shift_by_def, float):
@@ -1652,11 +1624,28 @@ def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False
         order_param = def_arr 
     order_param /= np.sqrt(av_defects[:,0][None, :, None])
     return order_param
-         
+        
 
 
 
 def main():
+    LL = 256
+    output_path = f'data\\nematic_analysis{LL}_LL0.05'
+    mode = 'all' # 'all' or 'short'
+
+    defect_list = gen_analysis_dict(LL, mode)
+
+    ad = AnalyseDefects(defect_list, output_path=output_path)
+
+    for N in range(ad.Ndata):
+        print("For N = ", N )
+        try:
+            ad.print_params(Ndataset=N,act=[0.020])
+        except:
+            pass
+
+
+def main2():
     do_extraction = False
     do_basic_analysis = True
     do_hyperuniformity_analysis = True

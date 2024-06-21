@@ -16,16 +16,18 @@ os.chdir(dir_path)
 
 ### FUNCTIONS ----------------------------------------------------------------------------------
 
+
 def gen_analysis_dict(LL, mode):
 
     dshort = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\nematic_analysis{LL}_LL0.05', \
               suffix = "short", priority = -1, LX = LL, Nframes = 181)
     dlong = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\nematic_analysis{LL}_LL0.05_long', \
-                suffix = "long", priority = 0, LX = LL, Nframes = 400)
+                suffix = "long", priority = 1, LX = LL, Nframes = 400)
+    priority_vl = 2 if LL == 512 else 3
     dvery_long = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\nematic_analysis{LL}_LL0.05_very_long',\
-                    suffix = "very_long", priority = 3, LX = LL, Nframes = 1500)
+                    suffix = "very_long", priority = priority_vl, LX = LL, Nframes = 1500)
     dvery_long2 = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\nematic_analysis{LL}_LL0.05_very_long_v2',\
-                    suffix = "very_long2", priority = 2, LX = LL, Nframes = 1500)
+                    suffix = "very_long2", priority = 3 if priority_vl == 2 else 2, LX = LL, Nframes = 1500)
 
     if mode == 'all':
         if LL == 2048:
@@ -37,26 +39,25 @@ def gen_analysis_dict(LL, mode):
     
     return defect_list
 
+
 def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False):
 
     if isinstance(shift_by_def, float):
         av_def_max = shift_by_def
     else:
         av_def_max = 0
-
     if shift:
         order_param = def_arr - av_def_max
     else:
         order_param = def_arr 
     order_param /= np.sqrt(av_defects[:,0][None, :, None])
-    
     return order_param
         
 ### MAIN ---------------------------------------------------------------------------------------
 
 
 def main():
-    do_extraction = True
+    do_extraction = False
     do_basic_analysis = True
     do_hyperuniformity_analysis = True
     do_merge = True
@@ -72,7 +73,7 @@ def main():
 
     # hyperuniformity parameters
     act_idx_bounds=[0,None]
-    Npoints_to_fit = 5
+    Npoints_to_fit = 8
     Nbounds = [3,6]
 
     dens_fluc_dict = dict(fit_densities = True, act_idx_bounds = [0, None], weighted_mean = False, window_idx_bounds = [30 - Npoints_to_fit, None])
