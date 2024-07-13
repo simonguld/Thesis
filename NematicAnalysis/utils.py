@@ -602,7 +602,8 @@ def do_poisson_clustering(Nlist, L, Ntrial, Ncmin = 2, method_kwargs = dict(n_cl
 
     return cluster_arr, cl_mean, cl_std
 
-def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, method_kwargs = dict(n_clusters=None, linkage = 'single', distance_threshold=33)):
+def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, use_grid = False,\
+    method_kwargs = dict(n_clusters=None, linkage = 'single', distance_threshold=33)):
     """
     This function is an improved version of do_poisson_clustering. It allows for Ndefects to vary for each activity,
     and also allows for Ntrial to be bigger than the number of defect entries in def_arr. For each run, it randomly selects
@@ -639,8 +640,12 @@ def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, method_kwargs 
 
             # generate points
             N = int(N)
-            defect_positions = np.random.rand(N, 2) * L   
-
+            if use_grid:
+                #defect_positions = (np.random.randint(0, int(L/2), size = (N, 2), dtype=int) * 2).astype(float)
+                defect_positions = generate_unique_points(N, int(L/2)) * 2
+            else:
+                defect_positions = np.random.rand(N, 2) * L  
+        
             # cluster
             labels = cst.fit_predict(defect_positions)
 
@@ -673,73 +678,101 @@ def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, method_kwargs 
 
     return cluster_arr, cl_mean, cl_std
 
-def extract_clustering_results(Nframes, act_list, act_dir_list, Nexp, Ncmin=2, save = False, save_path = None):
+def extract_clustering_results(clustering_dict, Nframes, act_list, act_dir_list, Nexp, Ncmin=2, save = False, save_path = None):
     """
     Analyse the defects for all the input folders
     """
-    for data_set in range(1):
-        # create arrays to store the clustering data
-        cluster_arr = np.nan * np.zeros([Nframes, 4, len(act_list), Nexp])
-        
-        # print('Analysing clustering data for input folder {}'.format(self.input_paths[N]))
-        for i, (act, act_dir) in enumerate(zip(act_list, act_dir_list)):
 
-            exp_list = []
-            exp_dir_list = []
+    LX = clustering_dict['LX']
+    suffix = clustering_dict['suffix']
+    # create arrays to store the clustering data
+    cluster_arr = np.nan * np.zeros([Nframes, 4, len(act_list), Nexp])
+    
+    # print('Analysing clustering data for input folder {}'.format(self.input_paths[N]))
+    for i, (act, act_dir) in enumerate(zip(act_list, act_dir_list)):
 
-            for file in os.listdir(act_dir):
-                exp_count = file.split('_')[-1]
-                exp_list.append(int(exp_count))
-                exp_dir_list.append(os.path.join(act_dir, file))
+        exp_list = []
+        exp_dir_list = []
 
-            # sort the activity list and the activity directory list
-            exp_list, exp_dir_list = zip(*sorted(zip(exp_list, exp_dir_list)))
+        for file in os.listdir(act_dir):
+            exp_count = file.split('_')[-1]
+            exp_list.append(int(exp_count))
+            exp_dir_list.append(os.path.join(act_dir, file))
 
-            for j, (exp, exp_dir) in enumerate(zip(exp_list, exp_dir_list)):
+        # sort the activity list and the activity directory list
+        exp_list, exp_dir_list = zip(*sorted(zip(exp_list, exp_dir_list)))
 
-                with open(os.path.join(exp_dir, 'labels_rm33.pkl'), 'rb') as f:
-                        labels = pickle.load(f)
-                nan_counter = 0
-                for k, frame in enumerate(labels[:Nframes]):
-                        
-                        if frame is None:
-                            nan_counter += 1
-                            continue
+        for j, (exp, exp_dir) in enumerate(zip(exp_list, exp_dir_list)):
 
-                        Ndefects = len(frame)
-                             
-                        # store the number of defects 
-                        cluster_arr[k, 0, i, j] = Ndefects
+            with open(os.path.join(exp_dir, 'labels_rm33.pkl'), 'rb') as f:
+                    labels = pickle.load(f)
+            nan_counter = 0
+            for k, frame in enumerate(labels[:Nframes]):
+                    
+                    if frame is None:
+                        nan_counter += 1
+                        continue
 
-                        counts = np.unique(frame, return_counts=True)[1]
+                    Ndefects = len(frame)
+                            
+                    # store the number of defects 
+                    cluster_arr[k, 0, i, j] = Ndefects
 
-                        # Only count clusters with more than Ncmin defects
-                        mask = (counts >= Ncmin)
-                        counts_above_min = counts[mask]
+                    counts = np.unique(frame, return_counts=True)[1]
 
-                        # store the fraction of clustered defects
-                        cluster_arr[k, 1, i, j] = counts_above_min.sum() / Ndefects
-                        # store the number of clusters
-                        cluster_arr[k, 2, i, j] = len(counts_above_min)
-                
-                        with warnings.catch_warnings():
-                            warnings.simplefilter("ignore", category=RuntimeWarning)
-                            # store the average cluster size
-                            cluster_arr[k, 3, i, j] = np.nanmean(counts_above_min)
+                    # Only count clusters with more than Ncmin defects
+                    mask = (counts >= Ncmin)
+                    counts_above_min = counts[mask]
 
-        # average over experiments and frames
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            cl_mean = np.nanmean(cluster_arr, axis = (0,-1))
-            cl_std = np.nanstd(cluster_arr, axis = (0,-1))
-            cl_std /= np.sqrt(Nframes * Nexp)
-        if save:
-            pass
+                    # store the fraction of clustered defects
+                    cluster_arr[k, 1, i, j] = counts_above_min.sum() / Ndefects
+                    # store the number of clusters
+                    cluster_arr[k, 2, i, j] = len(counts_above_min)
+            
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", category=RuntimeWarning)
+                        # store the average cluster size
+                        cluster_arr[k, 3, i, j] = np.nanmean(counts_above_min)
+
+    # average over experiments and frames
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        cl_mean = np.nanmean(cluster_arr, axis = (0,-1))
+        cl_std = np.nanstd(cluster_arr, axis = (0,-1))
+        cl_std /= np.sqrt(Nframes * Nexp)
+    if save:
+        if save_path is None:
+            save_path = f'C:\\Users\\Simon Andersen\\Projects\\Projects\\Thesis\\NematicAnalysis\\data\\na{LX}cl\\{suffix}'
+        if not os.path.isdir(save_path):
+            os.makedirs(save_path)
+        np.save(os.path.join(save_path, 'cluster_arr.npy'), cluster_arr)
+        np.save(os.path.join(save_path, 'cl_mean.npy'), cl_mean)
+        np.save(os.path.join(save_path, 'cl_std.npy'), cl_std)
     return cluster_arr, cl_mean, cl_std
 
 
 ### Functions for statistical analysis ------------------------------------------------
 
+def generate_unique_points(N, L):
+    # To ensure uniqueness, we might need to generate a few more points than N
+    extra_factor = 1.2
+    candidate_count = int(N * extra_factor)
+    
+    # Generate candidate points
+    candidates = np.random.randint(0, L, size=(candidate_count, 2))
+    
+    # Convert to a set of tuples to ensure uniqueness
+    unique_candidates = set(map(tuple, candidates))
+    
+    # If not enough unique points, keep generating more until we have enough
+    while len(unique_candidates) < N:
+        additional_candidates = np.random.randint(0, L, size=(candidate_count, 2))
+        unique_candidates.update(map(tuple, additional_candidates))
+    
+    # Convert the set back to a numpy array and select exactly N points
+    unique_points = np.array(list(unique_candidates))[:N]
+
+    return unique_points
 
 def est_stationarity(time_series, interval_len, Njump, Nconverged, max_sigma_dist = 2):
  
@@ -766,7 +799,6 @@ def est_stationarity(time_series, interval_len, Njump, Nconverged, max_sigma_dis
         else:
             return it * Njump + int(interval_len / 2), True
     return it * Njump + int(interval_len / 2), False
-
 
 def get_statistics_from_fit(fitting_object, Ndatapoints, subtract_1dof_for_binning = False):
     
