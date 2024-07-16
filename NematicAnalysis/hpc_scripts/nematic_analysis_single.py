@@ -23,7 +23,7 @@ os.chdir(dir_path)
 sys.path.append(os.getcwd())
 
 
-development_mode = False
+development_mode = True
 check_for_convergence = False
 
 # if development_mode, use only few frames
@@ -32,7 +32,6 @@ if development_mode:
 
 
 ### FUNCTIONS ----------------------------------------------------------------------------------
-
 
 def get_defect_list(archive, LX, LY, idx_first_frame=0, verbose=False):
     """
@@ -69,6 +68,7 @@ def get_defect_list(archive, LX, LY, idx_first_frame=0, verbose=False):
         t_end = time.time() - t_start
         # print 2 with 2 decimals
         print('Time to get defect list: %.2f s' % t_end)
+
     return top_defects
 
 def get_defect_density(defect_list, area, return_charges=False, save = False, save_path = None,):
@@ -319,6 +319,7 @@ def main():
 
     exp = int(output_path.split('_')[-1])
     act = float(output_path.split('_')[-3])
+
 
     archive_path = os.path.join(folder_path)
     av_defects_path = os.path.join(output_path, f'Ndefects_act{act}_exp{exp}.txt')

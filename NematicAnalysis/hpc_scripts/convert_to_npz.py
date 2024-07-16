@@ -359,14 +359,15 @@ if __name__ == '__main__':
         p.starmap(conversion_wrapper, [(file, compressor) for file in files], chunksize=csize)
     print(f'Time to convert all files for exp. {exp} and activity {act} using {ntasks} cpus: {perf_counter() - t_start:.2f} s')
 
-    if verbose > 0:
+    if verbose > 0 or exp == 0:
         # print conversion info
         compressor.print_conversion_info()
 
     if delete_original_archive:
         compressor.delete_original_archive(only_if_successful=True, call_cluster_cmd = True,)
     else:
-        succesful_conversion = compressor.check_conversion_success(files, verbose=verbose)
+        print_info = 1 if exp == 0 else verbose
+        succesful_conversion = compressor.check_conversion_success(files, verbose=print_info)
     
         if succesful_conversion:
             print(f'All {Nfiles} files successfully converted to npz for exp. {exp} and activity {act}')

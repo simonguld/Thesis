@@ -878,6 +878,31 @@ class AnalyseDefects:
                 fit_params_sfac_time_av[i, :Nparams] = np.nanmean(fit_vals, axis = 0)
                 fit_params_sfac_time_av[i, Nparams:] = np.nanstd(fit_vals, axis = 0) / np.sqrt(Npoints_bounds[1] - Npoints_bounds[0])
 
+            fit_vals = np.nan * np.zeros((Npoints_bounds[1] - Npoints_bounds[0], Nparams))
+            fit_err = np.nan * np.zeros((Npoints_bounds[1] - Npoints_bounds[0], Nparams))
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=np.VisibleDeprecationWarning)
+                for j, Npoints_to_fit in enumerate(range(Npoints_bounds[0], Npoints_bounds[1])):         
+                    
+                    fit = do_chi2_fit(fit_func, x[:Npoints_to_fit], y[:Npoints_to_fit], yerr[:Npoints_to_fit], param_guess, verbose = False)
+                    
+                    fit_vals[j] = fit.values[:] if fit.values[0] != 0.1 else [np.nan, np.nan]
+                    fit_err[j] = fit.errors[:] if fit.values[0] != 0.1 else [np.nan, np.nan]
+
+                nan_mask = np.isnan(fit_vals[:,0])
+                fit_vals_valid = fit_vals[~nan_mask]
+                fit_err_valid = fit_err[~nan_mask]
+
+                if len(fit_vals_valid) == 0 or len(fit_err_valid) == 0:
+                    continue
+                
+                alpha_weighted_av, alpha_sem = calc_weighted_mean(fit_vals_valid[:,0], fit_err_valid[:,0])
+                beta_weighted_av, beta_sem = calc_weighted_mean(fit_vals_valid[:,1], fit_err_valid[:,1])
+                fit_params_sfac_time_av[i, :Nparams] = alpha_weighted_av, beta_weighted_av
+                fit_params_sfac_time_av[i, Nparams:] = np.std(fit_vals_valid, axis = 0) / fit_vals_valid.shape[0] 
+
+
         if save:
             np.save(os.path.join(output_path, f'fit_params_sfac_time_av{suffix}.npy'), fit_params_sfac_time_av)
             np.save(os.path.join(output_path, f'act_list_alpha_fit_sfac.npy'), act_list)

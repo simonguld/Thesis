@@ -63,7 +63,7 @@ def main():
     do_merge = True
 
     system_size_list = [256, 512, 1024, 2048]
-    system_size_list = [2048]
+    #system_size_list = [2048]
     mode = 'all' # 'all' or 'short'
 
     # order parameter parameters
@@ -74,13 +74,13 @@ def main():
     # hyperuniformity parameters
     act_idx_bounds=[0,None]
     Npoints_to_fit = 8
-    Nbounds = [3,6]
+    Nbounds = [[3,n] for n in range(5,9)]
 
     dens_fluc_dict = dict(fit_densities = True, act_idx_bounds = [0, None], weighted_mean = False, window_idx_bounds = [30 - Npoints_to_fit, None])
-    sfac_dict = dict(Npoints_bounds = Nbounds, act_idx_bounds = act_idx_bounds,)
+    
 
     
-    for LL in system_size_list:
+    for i, LL in enumerate(system_size_list):
         print('\nStarting analysis for L =', LL)
         time0 = time.time()
         output_path = f'data\\nematic_analysis{LL}_LL0.05'
@@ -92,6 +92,7 @@ def main():
             ad.extract_results()
         if do_basic_analysis:
             if do_hyperuniformity_analysis:
+                sfac_dict = dict(Npoints_bounds = Nbounds[i], act_idx_bounds = act_idx_bounds,)
                 ad.analyze_defects(dens_fluc_dict=dens_fluc_dict, sfac_dict=sfac_dict)
             else:
                 ad.analyze_defects()

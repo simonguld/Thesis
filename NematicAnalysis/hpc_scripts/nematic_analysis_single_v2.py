@@ -387,6 +387,7 @@ def main():
     mode = args.mode
     archive_path = args.input_folder
     output_path = args.output_folder
+    defect_position_path = os.path.join(output_path, f'defect_positions.pkl')
 
     if mode == "sfac":
         calc_sfac = True
@@ -404,25 +405,32 @@ def main():
     exp = int(output_path.split('_')[-1])
     act = float(output_path.split('_')[-3])
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     msg = f"\nAnalyzing experiment {exp} and activity {act}"
     print(msg)
 
-    # Load data archive
-    ar = mp.archive.loadarchive(archive_path)
-    LX, LY = ar.__dict__['LX'], ar.__dict__['LY']
+    if os.path.exists(defect_position_path):
+        with open(defect_position_path, 'rb') as f:
+            top_defects = pickle.load(f)
+    else:
+        # Load data archive
+        ar = mp.archive.loadarchive(archive_path)
+        LX, LY = ar.__dict__['LX'], ar.__dict__['LY']
 
-    if not act == ar.__dict__['zeta']:
-        err_msg = f"Activity list and zeta in archive do not match for experiment {exp}. Exiting..."
-        print(err_msg)
-        raise ValueError(err_msg)
-    
-    # Get defect list
-    top_defects = get_defect_list(ar, LX, LY,)
+        if not act == ar.__dict__['zeta']:
+            err_msg = f"Activity list and zeta in archive do not match for experiment {exp}. Exiting..."
+            print(err_msg)
+            raise ValueError(err_msg)
+        
+        # Get defect list
+        top_defects = get_defect_list(ar, LX, LY,)
 
-    # save top_defects
-    with open(os.path.join(output_path, 'defect_positions.pkl'), 'wb') as f:
-        pickle.dump(top_defects, f)
+        # save top_defects
+        with open(os.path.join(output_path, 'defect_positions.pkl'), 'wb') as f:
+            pickle.dump(top_defects, f)
+ 
+        print("Time to calculate defect positions for experiment {exp} and activity {act}: ", np.round(time.perf_counter()-t1,2), "s")
+
 
     if calc_sfac:
         # Define paths 
@@ -431,6 +439,7 @@ def main():
         rad_path = os.path.join(output_path, f'rad.txt')
         pcf_path = os.path.join(output_path, f'pcf.txt')
    
+        t2 = time.perf_counter()
         print(f"Calculating structure factor for experiment {exp} and activity {act}")
 
         # Define box window
@@ -450,8 +459,8 @@ def main():
             np.savetxt(rad_path, rad_arr)
             np.savetxt(pcf_path, pcf_arr)
 
-        t2 = time.time()
-        msg = f"Time to analyze experiment {exp} and activity {act}: {np.round(t2-t1,2)} s"
+        t3 = time.perf_counter()
+        msg = f"Time to calculate Sfac for experiment {exp} and activity {act}: {np.round(t3-t2,2)} s"
         print(msg)
 
         gen_status_txt(msg, os.path.join(output_path, 'sfac_analysis_completed.txt'))
@@ -464,6 +473,7 @@ def main():
         window_sizes_path = os.path.join(output_path, f'window_sizes.txt')
         model_params_path = os.path.join(output_path, f'model_params.pkl')
 
+        t4 = time.perf_counter()
         print(f"Calculating defect densities for experiment {exp} and activity {act}")
 
         # Define window sizes as fraction of system size
@@ -497,11 +507,11 @@ def main():
         _, _ = get_density_fluctuations(top_defects[idx_first_frame:], window_sizes, boundaries = boundaries, N_center_points= None, Ndof=1, \
                                         save = True, save_path_av_counts=av_counts_path, save_path_var_counts=var_counts_path)
 
-        t2 = time.time()
-        msg = f"Time to analyze experiment {exp} and activity {act}: {np.round(t2-t1,2)} s"
+        t5 = time.perf_counter()
+        msg = f"Time to calculate density fluctuations for experiment {exp} and activity {act}: {np.round(t5-t4,2)} s\n"
         print(msg)
 
-        gen_status_txt(msg, os.path.join(output_path, 'dens_analysis_completed.txt'))
+        gen_status_txt(msg, os.path.join(output_path, 'analysis_completed.txt'))
 
 
 if __name__ == '__main__':
