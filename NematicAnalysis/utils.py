@@ -801,7 +801,10 @@ def est_stationarity(time_series, interval_len, Njump, Nconverged, max_sigma_dis
     return it * Njump + int(interval_len / 2), False
 
 def get_statistics_from_fit(fitting_object, Ndatapoints, subtract_1dof_for_binning = False):
-    
+    """
+    returns Ndof, chi2, p-value
+    """
+
     Nparameters = len(fitting_object.values[:])
     if subtract_1dof_for_binning:
         Ndof = Ndatapoints - Nparameters - 1
