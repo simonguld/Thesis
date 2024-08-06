@@ -66,7 +66,6 @@ def animate(oa, fn, rng=[], inter=500, show=True, save = False, save_path = None
 
     return anim
 
-
 def plot_frames(ar, archive_path, frame_idx_bounds = [], save = False, save_path = None):
     """
 
@@ -128,7 +127,6 @@ def plot_frames(ar, archive_path, frame_idx_bounds = [], save = False, save_path
         fig.savefig(save_to, dpi = 420, bbox_inches='tight')
 
     return fig, ax
-
 
 def plot_structure_factor(kbins, smeans, sstds, k = None, sf_estimated = None):
     """
