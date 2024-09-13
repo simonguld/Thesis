@@ -8,10 +8,10 @@ from time import perf_counter
 import numpy as np
 
 
-
 class CompressArchive:
-    def __init__(self, archive_dir, output_dir = None, overwrite_existing_npz_files = False, \
-                    conversion_kwargs = {'dtype_out': 'float64', 'compress': True, 'exclude_keys': [], 'calc_velocities': False},):
+    def __init__(self, archive_dir, output_dir = None, overwrite_existing_npz_files = False, first_frame_num = None, \
+                    conversion_kwargs = {'dtype_out': 'float64', \
+                    'compress': True, 'exclude_keys': [], 'calc_velocities': False, 'include_AA_LBF_term': True},):
 
         self.archive_dir = archive_dir
         self.output_dir = archive_dir + '_npz' if output_dir is None else output_dir
@@ -27,6 +27,18 @@ class CompressArchive:
         with open(params_path, 'r') as f:
             self.simulation_params = json.load(f)['data']
 
+        if first_frame_num is None:
+            self.first_frame_num = self.simulation_params['nstart']['value']
+        else:
+            self.first_frame_num = first_frame_num
+            # change nstart in parameters.json in the output folder
+            params_path_out = os.path.join(self.output_dir, 'parameters.json')
+            with open(params_path_out, 'r') as f:
+                params = json.load(f)
+            params['data']['nstart']['value'] = first_frame_num
+            with open(params_path_out, 'w') as f:
+                json.dump(params, f)
+
         self.frame_list = self.__find_missing_frames()
         self.failed_conversion_list = []
 
@@ -34,12 +46,17 @@ class CompressArchive:
         self.LY = self.simulation_params['LY']['value']
         self.num_frames = len(self.frame_list)
 
-        self.overwrite_existing_npz_files = overwrite_existing_npz_files
+        if 'isGuo' in self.simulation_params.keys():
+                self.isGuo = self.simulation_params['isGuo']['value']   
+        else:
+            self.isGuo = True
 
         self.dtype_out = conversion_kwargs['dtype_out']
         self.compress = conversion_kwargs['compress']
         self.exclude_keys = conversion_kwargs['exclude_keys']
         self.calc_velocities = conversion_kwargs['calc_velocities']
+        self.include_AA_LBF_term = conversion_kwargs['include_AA_LBF_term'] 
+        self.overwrite_existing_npz_files = overwrite_existing_npz_files
         self.include_keys = []
 
         self.time_to_open_json = np.nan
@@ -51,11 +68,25 @@ class CompressArchive:
     def __calc_density(self, ff):
         return np.sum(ff, axis=1)
 
-    def __calc_velocity(self, ff, density = None):
+    def __calc_velocity(self, ff, FFx = None, FFy = None, density = None):
+            
         d = self.__calc_density(ff) if density is None else density
-        return np.asarray([ (ff.T[1] - ff.T[2] + ff.T[5] - ff.T[6] - ff.T[7] + ff.T[8]) / d,
-                            (ff.T[3] - ff.T[4] + ff.T[5] - ff.T[6] + ff.T[7] - ff.T[8]) / d
-                        ]).reshape(2, self.LX, self.LY)
+
+        if self.include_AA_LBF_term:
+            if FFx is None or FFy is None:
+                raise ValueError('FFx and FFy must be provided if include_AA_LBF is True')
+
+            # calculate the AA_LBF parameter
+            AA_LBF = .5 if self.isGuo else self.simulation_params['tau']['value']
+
+            return np.asarray([ (ff.T[1] - ff.T[2] + ff.T[5] - ff.T[6] - ff.T[7] + ff.T[8] + AA_LBF * FFx) / d,
+                                (ff.T[3] - ff.T[4] + ff.T[5] - ff.T[6] + ff.T[7] - ff.T[8] + AA_LBF * FFy) / d
+                            ]).reshape(2, self.LX, self.LY)
+        else:
+            return np.asarray([ (ff.T[1] - ff.T[2] + ff.T[5] - ff.T[6] - ff.T[7] + ff.T[8]) / d,
+                                (ff.T[3] - ff.T[4] + ff.T[5] - ff.T[6] + ff.T[7] - ff.T[8]) / d
+                            ]).reshape(2, self.LX, self.LY)
+
 
     def __estimate_size_reduction(self,):
 
@@ -97,10 +128,11 @@ class CompressArchive:
         for item in dir_list:
             if item.startswith("frame"):
                 frame_num = int(item.split('.')[0].split('frame')[-1])
-                frame_list.append(frame_num)
+                if frame_num >= self.first_frame_num:
+                    frame_list.append(frame_num)
 
         sp = self.simulation_params
-        frame_range = np.arange(sp['nstart']['value'], sp['nsteps']['value'] + 1, sp['ninfo']['value'])
+        frame_range = np.arange(self.first_frame_num, sp['nsteps']['value'] + 1, sp['ninfo']['value'])
 
         if len(frame_list) == len(frame_range):
             return frame_range
@@ -118,11 +150,20 @@ class CompressArchive:
 
         if self.calc_velocities:
             ff = np.array(json_dict['data']['ff']['value'],dtype='float64')
-            arr_dict['density'] = self.__calc_density(ff).astype(self.dtype_out)         
-            v = self.__calc_velocity(ff, arr_dict['density'])
+            arr_dict['density'] = self.__calc_density(ff).astype(self.dtype_out)
+
+            if self.include_AA_LBF_term:
+                FFx = np.array(json_dict['data']['FFx']['value'],dtype='float64')
+                FFy = np.array(json_dict['data']['FFy']['value'],dtype='float64')
+            else:
+                FFx = None
+                FFy = None
+
+            v = self.__calc_velocity(ff, FFx, FFy, arr_dict['density'])
             arr_dict['vx'] = v[0].flatten().astype(self.dtype_out)
             arr_dict['vy'] = v[1].flatten().astype(self.dtype_out)
         return arr_dict
+
 
     def __convert_json_to_npz(self, frame_number):
 
@@ -174,10 +215,6 @@ class CompressArchive:
             if len(self.failed_conversion_list) > 0:
                 print(f'Frames for which conversion to npz failed: {self.failed_conversion_list}')
             self.print_conversion_info()
-
-        if self.delete_archive_if_successful and len(self.failed_conversion_list) == 0:
-            shutil.rmtree(self.archive_dir)
-            print(f'Archive {self.archive_dir} deleted')
         return
 
     def delete_original_archive(self, only_if_successful = True, call_cluster_cmd = False,  verbose = 1):
@@ -224,6 +261,7 @@ class CompressArchive:
             data = json.load(f)
 
         arr_dict = self.__unpack_json_dict(data)
+
         if self.compress:
             np.savez_compressed(frame_output_path, **arr_dict)
         else:
@@ -232,19 +270,35 @@ class CompressArchive:
             print(f'File {frame_output_path} created')
         return
 
-    def check_conversion_success(self, verbose = 1):
+    def check_conversion_success(self, files_list = None, verbose = 1):
         if len(self.failed_conversion_list) == 0:
-
-            # check that converted files can be opened and the self.include_keys key are present
-            for frame in self.frame_list:
-                npz_path = os.path.join(self.output_dir, f'frame{frame}.npz')
-                arr_dict = np.load(npz_path, allow_pickle=True)
-                for key in self.include_keys:
-                    if key not in arr_dict.files:
-                        print(f'Key {key} not found in frame {frame}')
-                        return False
+            if files_list is None:
+                # check that converted files can be opened and the self.include_keys key are present
+                for frame in self.frame_list:
+                    npz_path = os.path.join(self.output_dir, f'frame{frame}.npz')
+                    arr_dict = np.load(npz_path, allow_pickle=True)
+                    for key in self.include_keys:
+                        if key not in arr_dict.files:
+                            print(f'Key {key} not found in frame {frame}')
+                            return False
+            else:
+                for file in files_list:
+                    npz_path = os.path.join(self.output_dir, os.path.basename(file).replace('.json', '.npz'))
+                    arr_dict = np.load(npz_path, allow_pickle=True)
+                    for key in self.include_keys:
+                        if key not in arr_dict.files:
+                            print(f'Key {key} not found in file {npz_path}')
+                            return False
+                        array = arr_dict[key]
+                        if not array.shape[0] == self.LX * self.LY :
+                            print(f'Key {key} has wrong shape in file {npz_path}')
+                            return False
+                        if not array.dtype == self.dtype_out:
+                            print(f'Key {key} has wrong dtype in file {npz_path}')
+                            return False
             if verbose > 0:
-                print(f'All {self.num_frames} frames successfully converted to npz')
+                nframes = self.num_frames if files_list is None else len(files_list)
+                print(f'All {nframes} frames successfully converted to npz')
             return True
         else:
             if verbose > 0:
@@ -252,10 +306,6 @@ class CompressArchive:
             return False
 
 
-
 def conversion_wrapper(frame_input_path, compressor):
     compressor.convert_json_to_npz_parallel(frame_input_path)
-
-
-
 
