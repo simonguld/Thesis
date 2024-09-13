@@ -8,6 +8,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
+from itertools import product
+
 
 plt.style.use('sg_article')
 
@@ -16,8 +19,41 @@ from utils import *
 
 ### FUNCTIONS ----------------------------------------------------------------------------------
 
+def frame_plotter(frame, plot_director = True,  ms = 4, engine = plt):
+    """Plot a frame. If plot_director is False, the velocity field is plotted instead.
+    
+    Example usage:
+    
+    plotter = lambda frame, engine: frame_plotter(frame, plot_director = False, engine = engine)
+    animate(ar, plotter, rng=[0, Nframes], inter=1000, show=False, save=True);
+    
+    """
+    
+    # set plotting params 
+    plt.tick_params(
+    axis='both',          # changes apply to both axes
+    which='both',      # both major and minor ticks are affected
+    bottom=False,  
+    left=False,
+    right=False,       
+    top=False)#,      
+    #labelbottom=False) 
+   
 
-def animate(oa, fn, rng=[], inter=500, show=True, save = False, save_path = None):
+    ms = 4
+    alpha = 1
+    avg = 1
+    ms_dir, lw_dir = 1.2, 1.2
+
+    if plot_director:
+        mp.nematic.plot.director(frame, ms=ms_dir, lw=lw_dir, avg=avg, alpha=.9, engine=engine)
+        mp.nematic.plot.defects(frame, ms = ms, alpha=alpha, engine = engine) 
+    else:
+        mp.nematic.plot.velocity(frame, engine)
+        mp.nematic.plot.defects(frame, ms = ms, engine = engine) 
+    return
+
+def animate(oa, fn, rng=[], inter=500, boundaries=None, show=True, save = False, save_path = None):
     """Show a frame-by-frame animation.
 
     Parameters:
@@ -28,9 +64,9 @@ def animate(oa, fn, rng=[], inter=500, show=True, save = False, save_path = None
     """
     # set range
     if len(rng)==0:
-        rng = [ 1, oa._nframes+1 ]
+        rng = [ 1, oa.numframes+1 ]
     # create the figure
-    fig = plt.figure(figsize = (9,9))
+    fig = plt.figure(figsize = (3.,3.))
 
     # the local animation function
     def animate_fn(i):
@@ -41,11 +77,19 @@ def animate(oa, fn, rng=[], inter=500, show=True, save = False, save_path = None
         # load the frame
         f = get_frame_number(i, oa._path, oa.ninfo)
 
-        plt.title(f'Frame {f}')
-        fig.text(0.2, 0.96, '-1/2', fontsize=14, verticalalignment='bottom', color='blue', fontweight='bold')
-        fig.text(0.8, 0.96, '+1/2',fontsize=14, verticalalignment='bottom', color='green', fontweight='bold');
-
+       # plt.title(f'Frame {f}')
+        fig.text(0.2, 1.02, '-1/2', fontsize=14, verticalalignment='bottom', color='blue', fontweight='bold')
+        fig.text(0.8, 1.02, '+1/2',fontsize=14, verticalalignment='bottom', color='green', fontweight='bold');
         
+        if boundaries:
+            plt.ylim(boundaries[0],boundaries[1])
+            plt.xlim(boundaries[0],boundaries[1])
+    
+        xticks=range(boundaries[0] + 20, boundaries[1], 20)
+        plt.xticks(xticks)
+        plt.yticks(xticks)
+        plt.axis('off')
+    
         frame = oa._read_frame(f)
         # call the global function
         fn(frame, plt)
@@ -238,3 +282,53 @@ def sfac_plotter(act_list, kbins, sfac_av, Npoints_to_fit=8, act_idx_bounds=None
     fig.legend(ncol=6, fontsize = 14, bbox_to_anchor=(0.8, 1.01))
     fig.tight_layout()
     return fig, ax
+
+def vorticity_abs(frame, engine=plt, vmin=None, vmax=None, abs=False):
+    """ Plot the vorticity """
+    # vorticity computed with 5-point stencil
+    w = mp.base_modules.flow.vorticity(frame)
+    w = np.abs(w) if abs else w
+    wmax = np.max(np.abs(w))
+    # plot using engine
+    vmin = None if vmin is None else vmin * wmax
+    vmax = None if vmax is None else vmax * wmax
+
+    im = engine.imshow(w.T, cmap='turbo', interpolation='lanczos', origin='lower', vmin= vmin, vmax= vmax)
+    # add colorbar
+    divider = make_axes_locatable(engine)
+    cax = divider.append_axes("right", size="5%", pad="2%")
+    plt.colorbar(im, cax)
+
+def director(frame, engine=plt, scale=False, avg=4, ms = 1, alpha=1, lw=.5):
+    """ Plot the director field """
+    # get nematic field tensor
+    Qxx = frame.QQxx.reshape(frame.LX, frame.LY)
+    Qyx = frame.QQyx.reshape(frame.LX, frame.LY)
+    # get order S and director (nx, ny)
+    S, nx, ny = mp.nematic.nematicPy.get_director(Qxx, Qyx)
+    # plot using engine
+    x, y = [], []
+    for i, j in product(np.arange(frame.LX, step=avg), np.arange(frame.LY, step=avg)):
+        f = avg*(S[i,j] if scale else 1.)
+        x.append(i - f*nx[i,j]/2.)
+        x.append(i + f*nx[i,j]/2.)
+        x.append(None)
+        y.append(j - f*ny[i,j]/2.)
+        y.append(j + f*ny[i,j]/2.)
+        y.append(None)
+    engine.plot(x, y, color='k', linestyle='-', markersize=1, linewidth=lw, alpha=alpha)
+
+def order(frame, engine=plt, vmin=None):
+    """ Plot the order """
+    # get order S
+    S, _, _ = mp.nematic.nematicPy.get_director(frame.QQxx, frame.QQyx)
+    S = S.reshape(frame.LX, frame.LY)
+    # plot using engine
+    Smax = np.max(np.abs(S))
+    # plot using engine
+    vmin = np.min(Smax) if vmin is None else vmin
+    im = engine.imshow(S.T, cmap='turbo', interpolation='lanczos', origin='lower', alpha=.85, clim=(vmin, min(1,Smax)))
+    # add colorbar
+    divider = make_axes_locatable(engine)
+    cax = divider.append_axes("right", size="5%", pad="2%")
+    cbar = plt.colorbar(im, cax)

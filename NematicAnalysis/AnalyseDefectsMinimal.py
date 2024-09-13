@@ -13,7 +13,6 @@ import pathlib
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import ticker
-from sklearn.metrics import ndcg_score
 
 from utils import *
 from plot_utils import *

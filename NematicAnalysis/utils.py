@@ -602,8 +602,9 @@ def do_poisson_clustering(Nlist, L, Ntrial, Ncmin = 2, method_kwargs = dict(n_cl
 
     return cluster_arr, cl_mean, cl_std
 
-def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, use_grid = False,\
-    method_kwargs = dict(n_clusters=None, linkage = 'single', distance_threshold=33)):
+def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, use_grid = False, \
+    method_kwargs = dict(n_clusters=None, linkage = 'single', distance_threshold=33), save = False,\
+                         save_path = None,):
     """
     This function is an improved version of do_poisson_clustering. It allows for Ndefects to vary for each activity,
     and also allows for Ntrial to be bigger than the number of defect entries in def_arr. For each run, it randomly selects
@@ -640,12 +641,12 @@ def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, use_grid = Fal
 
             # generate points
             N = int(N)
-            if use_grid:
-                #defect_positions = (np.random.randint(0, int(L/2), size = (N, 2), dtype=int) * 2).astype(float)
-                defect_positions = generate_unique_points(N, int(L/2)) * 2
-            else:
-                defect_positions = np.random.rand(N, 2) * L  
         
+            if use_grid:
+                defect_positions = (np.random.randint(0, int(L/2), size = (N, 2), dtype=int) * 2).astype(float)
+            else:
+                defect_positions = np.random.rand(N, 2) * L   
+
             # cluster
             labels = cst.fit_predict(defect_positions)
 
@@ -676,6 +677,15 @@ def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, use_grid = Fal
         cl_std = np.nanstd(cluster_arr, axis = -1)
         cl_std /= np.sqrt(Ntrial)
 
+    if save:
+        if save_path is None:
+            save_path = f'C:\\Users\\Simon Andersen\\Projects\\Projects\\Thesis\\NematicAnalysis\\data\\na{LX}cl\\uni'
+        if not os.path.isdir(save_path):
+            os.makedirs(save_path)
+        np.save(os.path.join(save_path, 'cluster_arr_uni.npy'), cluster_arr)
+        np.save(os.path.join(save_path, 'cl_mean_uni.npy'), cl_mean)
+        np.save(os.path.join(save_path, 'cl_std_uni.npy'), cl_std)
+
     return cluster_arr, cl_mean, cl_std
 
 def extract_clustering_results(clustering_dict, Nframes, act_list, act_dir_list, Nexp, Ncmin=2, save = False, save_path = None):
@@ -688,7 +698,6 @@ def extract_clustering_results(clustering_dict, Nframes, act_list, act_dir_list,
     # create arrays to store the clustering data
     cluster_arr = np.nan * np.zeros([Nframes, 4, len(act_list), Nexp])
     
-    # print('Analysing clustering data for input folder {}'.format(self.input_paths[N]))
     for i, (act, act_dir) in enumerate(zip(act_list, act_dir_list)):
 
         exp_list = []

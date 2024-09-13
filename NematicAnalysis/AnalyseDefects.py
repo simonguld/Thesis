@@ -899,8 +899,9 @@ class AnalyseDefects:
                 
                 alpha_weighted_av, alpha_sem = calc_weighted_mean(fit_vals_valid[:,0], fit_err_valid[:,0])
                 beta_weighted_av, beta_sem = calc_weighted_mean(fit_vals_valid[:,1], fit_err_valid[:,1])
+
                 fit_params_sfac_time_av[i, :Nparams] = alpha_weighted_av, beta_weighted_av
-                fit_params_sfac_time_av[i, Nparams:] = np.std(fit_vals_valid, axis = 0) / fit_vals_valid.shape[0] 
+                fit_params_sfac_time_av[i, Nparams:] = np.std(fit_vals_valid, axis = 0) / np.sqrt(fit_vals_valid.shape[0] )
 
 
         if save:
