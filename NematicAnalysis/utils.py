@@ -679,7 +679,7 @@ def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, use_grid = Fal
 
     if save:
         if save_path is None:
-            save_path = f'C:\\Users\\Simon Andersen\\Projects\\Projects\\Thesis\\NematicAnalysis\\data\\na{LX}cl\\uni'
+            save_path = f'C:\\Users\\Simon Andersen\\Projects\\Projects\\Thesis\\NematicAnalysis\\data\\na{L}cl\\uni'
         if not os.path.isdir(save_path):
             os.makedirs(save_path)
         np.save(os.path.join(save_path, 'cluster_arr_uni.npy'), cluster_arr)
@@ -688,7 +688,7 @@ def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, use_grid = Fal
 
     return cluster_arr, cl_mean, cl_std
 
-def extract_clustering_results(clustering_dict, Nframes, act_list, act_dir_list, Nexp, Ncmin=2, save = False, save_path = None):
+def extract_clustering_results(clustering_dict, Nframes, conv_list, act_list, act_dir_list, Nexp, Ncmin=2, save = False, save_path = None):
     """
     Analyse the defects for all the input folders
     """
@@ -746,9 +746,15 @@ def extract_clustering_results(clustering_dict, Nframes, act_list, act_dir_list,
     # average over experiments and frames
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
-        cl_mean = np.nanmean(cluster_arr, axis = (0,-1))
-        cl_std = np.nanstd(cluster_arr, axis = (0,-1))
-        cl_std /= np.sqrt(Nframes * Nexp)
+        cl_mean = np.nan * np.zeros([4, len(act_list)])
+        cl_std = np.nan * np.zeros([4, len(act_list)])
+        for i, act in enumerate(act_list):
+            first_frame_idx = conv_list[i]
+    
+            cl_mean[:, i] = np.nanmean(cluster_arr[first_frame_idx:, :, i, :], axis = (0, -1))
+            cl_std[:, i] = np.nanstd(cluster_arr[first_frame_idx:, :, i, :], axis = (0, -1))
+            cl_std[:, i] /= np.sqrt((Nframes - first_frame_idx) * Nexp)
+        
     if save:
         if save_path is None:
             save_path = f'C:\\Users\\Simon Andersen\\Projects\\Projects\\Thesis\\NematicAnalysis\\data\\na{LX}cl\\{suffix}'
