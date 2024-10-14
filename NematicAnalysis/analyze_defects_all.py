@@ -8,7 +8,7 @@ import os
 import time
 import numpy as np
 
-from AnalyseDefects import AnalyseDefects
+from AnalyseDefects_dev import AnalyseDefects
 
 ## Change directory to current one
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -59,7 +59,7 @@ def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False
 def main():
     do_extraction = False
     do_basic_analysis = True
-    do_hyperuniformity_analysis = True
+    do_hyperuniformity_analysis = False
     do_merge = True
 
     system_size_list = [256, 512, 1024, 2048]

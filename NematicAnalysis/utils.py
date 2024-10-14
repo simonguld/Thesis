@@ -17,8 +17,7 @@ from iminuit import Minuit
 from scipy import stats
 from sklearn.neighbors import KDTree
 from sklearn.cluster import AgglomerativeClustering
-from statsmodels.tsa.stattools import adfuller
-
+from statsmodels.tsa.stattools import adfuller, acf
 
 import massPy as mp
 
@@ -1076,3 +1075,53 @@ def two_sample_test(x, y, x_err = None, y_err = None, one_sided = False, small_s
         return test_statistic, p_val
     else:
         return test_statistic, 2 * p_val
+
+
+def calc_acf_for_arr(arr, conv_idx = 0, nlags = 0, alpha = 0.05):
+    """
+    takes def arr with shape (Nframes, Nexp) and calculates the acf for each act and each exp 
+    nlags = 0: calculate all lags
+    """
+    Nframes, Nexp = arr.shape
+    nlags = Nframes - conv_idx if nlags == 0 else min(Nframes - conv_idx, nlags)
+
+    acf_arr = np.nan * np.zeros((Nframes + 1, Nexp))
+    confint_arr = np.nan * np.zeros((Nframes + 1, 2, Nexp))
+
+    for i in range(Nexp):
+        acf_res, confint = acf(arr[conv_idx:,i], nlags = nlags, alpha = alpha)
+        acf_arr[-(nlags + 1):, i] = acf_res
+        confint_arr[-(nlags + 1):, :, i] = confint
+
+    return acf_arr, confint_arr
+
+def estimate_effective_sample_size(acf_vals, acf_err_vals = None, confint_vals = None, 
+                                   max_lag=None, max_lag_threshold=0, 
+                                   simple_threshold = 0.1, use_abs_sum=False):
+    """ acf_vals must not be non ie. start from steady state.
+    if max_lag is None, the first lag where the confidence interval is below threshold is used.
+
+    Returns the effective sample size N_eff, tau, tau_simple
+    """
+    N = acf_vals.shape[0]
+
+    if max_lag is None:
+        if acf_err_vals is None:
+            val = confint_vals[:,0]
+        else:
+            val = acf_vals[:max_lag] - acf_err_vals[:max_lag]     
+        try:
+            max_lag = np.where(val < max_lag_threshold)[0][0]
+            tau_simple = np.where(val < np.abs(simple_threshold))[0][0]
+        except:
+            return np.nan, np.nan, np.nan
+  
+    # Sum the autocorrelation values
+    if use_abs_sum:
+        tau = 1 + 2 * np.sum(np.abs(acf_vals[1:max_lag]))
+    else:
+        tau = 1 + 2 * np.sum(acf_vals[1:max_lag])
+    
+    # Effective sample size
+    N_eff = N / tau
+    return N_eff, tau, tau_simple

@@ -18,6 +18,15 @@ from matplotlib import ticker
 from utils import *
 from plot_utils import *
 
+### TODO
+
+# go thorugh implementation so far and check for errors
+# imp temp corr for def_arr + store
+# incorp uncertainty into temp corr
+# take into account non-conv eg tau=2 
+# expand to sfac and pcf
+# incorop in merge etc.
+
 
 class AnalyseDefects:
     def __init__(self, input_list, output_path = 'data'):
@@ -174,6 +183,47 @@ class AnalyseDefects:
                 np.save(os.path.join(self.output_paths[N], 'pcf_time_av.npy'), pcf_time_av)
         return
 
+    def calc_corr_time(self, Ndataset = 0, 
+                         acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.1},
+                         save = True):  
+
+        def_arr = self.get_arrays_full(Ndataset = Ndataset)[0]
+        act_list = self.act_list[Ndataset]
+   
+        corr_time_arr = np.zeros((4, def_arr.shape[-2], def_arr.shape[-1],)) 
+  
+        max_lag = acf_dict['max_lag']
+        alpha = acf_dict['alpha']
+        max_lag_threshold = acf_dict['max_lag_threshold']
+        simple_threshold = acf_dict['simple_threshold']
+
+        for j, act in enumerate(self.act_list[Ndataset]):
+            act_idx = act_list.index(act)
+
+            conv_idx = self.conv_list[Ndataset][act_idx]
+            nf = def_arr.shape[0] - conv_idx
+            nlags= int(nf * acf_dict['nlags_frac'])  
+      
+            acf_arr, confint_arr = calc_acf_for_arr(def_arr[:, act_idx, :], conv_idx = conv_idx, nlags = nlags, alpha = alpha)
+    
+            for k in range(self.Nexp[Ndataset]):
+
+                acf_vals = acf_arr[- (nlags + 1):,k]
+                confint_vals = confint_arr[- (nlags + 1):,:,k]
+
+                _, tau, tau_simple = estimate_effective_sample_size(acf_vals,
+                                                            confint_vals = confint_vals, 
+                                                            max_lag = max_lag, 
+                                                            max_lag_threshold=max_lag_threshold, 
+                                                            simple_threshold=simple_threshold,
+                                                            )   
+                Neff = nf / tau
+                Neff_simple = nf / tau_simple   
+                corr_time_arr[:, j, k] = [tau, tau_simple, Neff, Neff_simple]
+        if save:
+            np.save(os.path.join(self.output_paths[Ndataset], 'corr_time.npy'), corr_time_arr)
+        return corr_time_arr
+
     def calc_binder_susceptibility(self, Ndataset = 0, Nframes = None, order_param_func = None, Nscale = True, \
                                 return_order_param = False, save = True):
 
@@ -249,7 +299,6 @@ class AnalyseDefects:
         else:
             return sus, binder_cumulants
     
-
     def print_params(self, Ndataset = 0, act = [], param_keys = ['nstart', 'nsteps']):
         """
         Print out the simulation parameters for the given dataset.
@@ -401,6 +450,25 @@ class AnalyseDefects:
     
         return kbins, sfac_av, rad, pcf_av
 
+    def get_sfac_pcf_full(self, Ndataset = 0,):
+        """
+        returns kbins, sfac, rad, pcf
+        """
+      
+        output_path = self.output_paths[Ndataset]
+
+        try:
+            sfac = np.load(os.path.join(output_path, f'sfac.npy'))
+            pcf = np.load(os.path.join(output_path, f'pcf.npy'))
+        except:
+            print('Structure factor or pcf not found. Analyse defects first.')
+            return
+
+        rad = np.loadtxt(os.path.join(output_path, 'rad.txt'))
+        kbins = np.loadtxt(os.path.join(output_path, 'kbins.txt'))
+    
+        return kbins, sfac, rad, pcf
+    
     def extract_results(self, save = True, normalize = True,):
         """
         Analyse the defects for all the input folders
@@ -471,7 +539,7 @@ class AnalyseDefects:
                     np.save(os.path.join(self.output_paths[N], 'sfac.npy'), sfac)
                     np.save(os.path.join(self.output_paths[N], 'pcf.npy'), pcf)
 
-    def analyze_defects(self, Ndataset_list = None, save = True, sus_binder_dict = {}, dens_fluc_dict = {}, sfac_dict = {}):
+    def analyze_defects(self, Ndataset_list = None, temp_corr_simple = True, sus_binder_dict = {}, dens_fluc_dict = {}, sfac_dict = {}):
 
         Ndataset_list = range(self.Ndata) if Ndataset_list is None else Ndataset_list
 
@@ -487,21 +555,26 @@ class AnalyseDefects:
             if len(np.unique(self.conv_list[N])) == 1:
                 print(f'NB: All simulations are set to converge at the first frame for dataset {N}. To change this, call update_conv_list.\n')
 
+            temp_corr = self.calc_corr_time(N, acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.1})  
+
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=RuntimeWarning)
-                self.__calc_av_over_exp(defect_arr, N, save_name = 'defect_arr_av', save = save)
-                self.__calc_av_over_exp(var_counts, N, save_name = 'var_counts_av', save = save)
-                self.__calc_av_over_exp(dens_fluc, N, save_name = 'dens_fluc_av', save = save)
-                self.__calc_av_over_exp(av_counts, N, save_name = 'av_counts_av', save = save)
+                self.__calc_av_over_exp(defect_arr, N, save_name = 'defect_arr_av',)
+                self.__calc_av_over_exp(var_counts, N, save_name = 'var_counts_av',)
+                self.__calc_av_over_exp(dens_fluc, N, save_name = 'dens_fluc_av',)
+                self.__calc_av_over_exp(av_counts, N, save_name = 'av_counts_av',)
+                self.__calc_av_over_exp(temp_corr, N, save_name = 'corr_time_av',)
        
-                av_defects = np.zeros((self.Nactivity[N], 2))        
+                av_defects = np.zeros((self.Nactivity[N], 2))      
+                
                 for i, act in enumerate(self.act_list[N]):
+                    Nind_samples = np.nansum(temp_corr[-1, i, :,]) if temp_corr_simple else np.nansum(temp_corr[-2, i, :,])
                     av_defects[i, 0] = np.nanmean(defect_arr[self.conv_list[N][i]:, i, :])
-                    av_defects[i, 1] = np.nanstd(defect_arr[self.conv_list[N][i]:, i, :]) / np.sqrt(defect_arr[self.conv_list[N][i]:, i, :].size)     
-                if save:
-                    np.save(os.path.join(self.output_paths[N], 'av_defects.npy'), av_defects)
+                    av_defects[i, 1] = np.nanstd(defect_arr[self.conv_list[N][i]:, i, :]) / np.sqrt(Nind_samples)     
+   
+                np.save(os.path.join(self.output_paths[N], 'av_defects.npy'), av_defects)
 
-                self.__calc_sfac_pcf(N, save = save)
+                self.__calc_sfac_pcf(N,)
 
             if sus_binder_dict != {}:
                 self.calc_binder_susceptibility(N, **sus_binder_dict)
@@ -529,6 +602,7 @@ class AnalyseDefects:
             defect_arr_av, var_counts_av, dens_fluc_av, av_counts_av, av_defects = self.get_arrays_av(Nbase, return_av_counts = True)
             binder_cumulants, susceptibility, order_param_av = self.get_binder_susceptibility(Nbase)
             alpha_fluc = np.load(os.path.join(self.output_paths[Nbase], f'alpha_list_{suffix}.npy'))
+            corr_time_av = np.load(os.path.join(self.output_paths[Nbase], 'corr_time_av.npy'))
         except:
             print('Base dataset not found. Analyse defects first.')
             return
@@ -555,8 +629,10 @@ class AnalyseDefects:
             var_counts_av[:, :, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'var_counts_av.npy'))[-Nbase_frames:]
             dens_fluc_av[:, :, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'dens_fluc_av.npy'))[-Nbase_frames:]
             av_counts_av[:, :, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'av_counts_av.npy'))[-Nbase_frames:]
+            corr_time_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'corr_time_av.npy'))[-Nbase_frames:]
 
             av_defects[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'av_defects.npy'))
+            corr_time_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'corr_time_av.npy'))
 
             susceptibility[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
             binder_cumulants[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'binder_cumulants.npy'))
