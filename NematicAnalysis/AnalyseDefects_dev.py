@@ -26,6 +26,7 @@ from plot_utils import *
 # take into account non-conv eg tau=2 
 # expand to sfac and pcf
 # incorop in merge etc.
+# how to account for the fundamental problem of time series length dependence?
 
 
 class AnalyseDefects:
@@ -211,7 +212,7 @@ class AnalyseDefects:
                 acf_vals = acf_arr[- (nlags + 1):,k]
                 confint_vals = confint_arr[- (nlags + 1):,:,k]
 
-                _, tau, tau_simple = estimate_effective_sample_size(acf_vals,
+                tau, tau_simple = estimate_effective_sample_size(acf_vals,
                                                             confint_vals = confint_vals, 
                                                             max_lag = max_lag, 
                                                             max_lag_threshold=max_lag_threshold, 
@@ -567,7 +568,7 @@ class AnalyseDefects:
        
                 av_defects = np.zeros((self.Nactivity[N], 2))      
                 
-                for i, act in enumerate(self.act_list[N]):
+                for i, _ in enumerate(self.act_list[N]):
                     Nind_samples = np.nansum(temp_corr[-1, i, :,]) if temp_corr_simple else np.nansum(temp_corr[-2, i, :,])
                     av_defects[i, 0] = np.nanmean(defect_arr[self.conv_list[N][i]:, i, :])
                     av_defects[i, 1] = np.nanstd(defect_arr[self.conv_list[N][i]:, i, :]) / np.sqrt(Nind_samples)     
@@ -664,6 +665,7 @@ class AnalyseDefects:
             np.save(os.path.join(save_path, 'binder_cumulants.npy'), binder_cumulants)
             np.save(os.path.join(save_path, 'order_param_av.npy'), order_param_av)
             np.save(os.path.join(save_path, f'alpha_list_{suffix}.npy'), alpha_fluc)
+            np.save(os.path.join(save_path, 'corr_time_av.npy'), corr_time_av)
             if include_sfac:
                 np.save(os.path.join(save_path, 'sfac_av.npy'), sfac_av)
                 np.save(os.path.join(save_path, 'sfac_time_av.npy'), sfac_time_av)
