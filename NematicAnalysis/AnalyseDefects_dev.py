@@ -83,10 +83,10 @@ class AnalyseDefects:
                     windows = np.loadtxt(os.path.join(self.output_paths[i], 'window_sizes.txt'))
                 self.window_sizes.append(windows)
                     
-                if not os.path.isfile(os.path.join(self.output_paths[i], 'kbins.txt')) or not os.path.isfile(os.path.join(self.output_paths[i], 'rad.txt')):
+                if not os.path.isfile(os.path.join(self.output_paths[i], 'kbins.txt')) or not os.path.isfile(os.path.join(self.output_paths[i], 'rad.npy')):
                     subsubdir = os.path.join(subdir_full, os.listdir(subdir_full)[0])
                     dir_kbins = os.path.join(subsubdir, 'kbins.txt')
-                    dir_rad = os.path.join(subsubdir, 'rad.txt')
+                    dir_rad = os.path.join(subsubdir, 'rad.npy')
 
                     # save the kbins and rad if they exist
                     if os.path.isfile(dir_kbins):
@@ -94,7 +94,7 @@ class AnalyseDefects:
                         np.savetxt(os.path.join(self.output_paths[i], 'kbins.txt'), kbins)
                     if os.path.isfile(dir_rad):
                         rad = np.loadtxt(dir_rad)
-                        np.savetxt(os.path.join(self.output_paths[i], 'rad.txt'), rad)
+                        np.save(os.path.join(self.output_paths[i], 'rad.npy'), rad)
        
             act, act_dir = zip(*sorted(zip(act, act_dir)))
 
@@ -446,7 +446,7 @@ class AnalyseDefects:
             print('Structure factor or pcf not found. Analyse defects first.')
             return
 
-        rad = np.loadtxt(os.path.join(output_path, 'rad.txt'))
+        rad = np.load(os.path.join(output_path, 'rad.npy'))
         kbins = np.loadtxt(os.path.join(output_path, 'kbins.txt'))
     
         return kbins, sfac_av, rad, pcf_av
@@ -465,7 +465,7 @@ class AnalyseDefects:
             print('Structure factor or pcf not found. Analyse defects first.')
             return
 
-        rad = np.loadtxt(os.path.join(output_path, 'rad.txt'))
+        rad = np.load(os.path.join(output_path, 'rad.npy'))
         kbins = np.loadtxt(os.path.join(output_path, 'kbins.txt'))
     
         return kbins, sfac, rad, pcf
@@ -483,7 +483,7 @@ class AnalyseDefects:
             if os.path.isfile(os.path.join(self.output_paths[N], 'kbins.txt')):
                 ext_sfac = True
                 kbins = np.loadtxt(os.path.join(self.output_paths[N], 'kbins.txt'))
-                rad = np.loadtxt(os.path.join(self.output_paths[N], 'rad.txt'))
+                rad = np.load(os.path.join(self.output_paths[N], 'rad.npy'))
                 sfac = np.nan * np.zeros((self.Nframes[N], len(kbins), 2, self.Nactivity[N], min(10, self.Nexp[N])))
                 pcf = np.nan * np.zeros((self.Nframes[N], len(rad), self.Nactivity[N], min(self.Nexp[N], 10)))
             else:
@@ -672,7 +672,7 @@ class AnalyseDefects:
                 np.save(os.path.join(save_path, 'pcf_av.npy'), pcf_av)
                 np.save(os.path.join(save_path, 'pcf_time_av.npy'), pcf_time_av)
                 np.savetxt(os.path.join(save_path, 'kbins.txt'), kbins)
-                np.savetxt(os.path.join(save_path, 'rad.txt'), rad)
+                np.save(os.path.join(save_path, 'rad.npy'), rad)
                 np.save(os.path.join(save_path, f'alpha_list_sfac.npy'), alpha_sfac)
                 np.save(os.path.join(save_path, f'fit_params_sfac_time_av.npy'), fit_params_sfac_time_av)
         return

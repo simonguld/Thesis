@@ -33,7 +33,7 @@ def gen_analysis_dict(LL, mode):
         if LL == 2048:
             defect_list = [dshort, dlong]
         else:
-            defect_list = [dshort, dlong, dvery_long, dvery_long2] if LL in [256, 512] else [dshort, dlong, dvery_long]
+            defect_list = [dshort, dlong, dvery_long, dvery_long2] if LL in [256] else [dshort, dlong, dvery_long]
     else:
         defect_list = [dshort]
     
@@ -57,13 +57,13 @@ def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False
 
 
 def main():
-    do_extraction = False
+    do_extraction = True
     do_basic_analysis = True
-    do_hyperuniformity_analysis = False
+    do_hyperuniformity_analysis = True
     do_merge = True
 
     system_size_list = [256, 512, 1024, 2048]
-    #system_size_list = [2048]
+    system_size_list = [512]
     mode = 'all' # 'all' or 'short'
 
     # order parameter parameters
