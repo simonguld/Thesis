@@ -9,7 +9,6 @@ import os
 import warnings
 import pickle as pkl
 import pathlib
-from xml.etree.ElementInclude import include
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -858,8 +857,8 @@ class AnalyseDefects:
                     
                     fit = do_chi2_fit(fit_func, x[:Npoints_to_fit], y[:Npoints_to_fit], yerr[:Npoints_to_fit], param_guess, verbose = False)
                     
-                    fit_vals[j] = fit.values[:] if fit.values[0] != 0.1 else [np.nan, np.nan]
-                    fit_err[j] = fit.errors[:] if fit.values[0] != 0.1 else [np.nan, np.nan]
+                    fit_vals[j] = fit.values[:] if fit._fmin.is_valid else [np.nan, np.nan]
+                    fit_err[j] = fit.errors[:] if fit._fmin.is_valid else [np.nan, np.nan]
 
                 nan_mask = np.isnan(fit_vals[:,0])
                 fit_vals_valid = fit_vals[~nan_mask]
