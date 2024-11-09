@@ -145,8 +145,7 @@ class AnalyseDefects:
         if save:
             np.save(os.path.join(self.output_paths[Ndataset], save_name + '.npy'), output_arr)
         return output_arr if return_arr else None
-
-    
+ 
     def __calc_sfac_pcf(self, Ndataset = 0, ddof = 1, calculate_pcf = True, save = True,):
         
         N = Ndataset
@@ -1349,7 +1348,6 @@ class AnalyseDefects:
                 os.makedirs(os.path.join(output_path, 'figs'))
             fig.savefig(os.path.join(output_path, f'figs\\alpha_sfac.png'), dpi = 420)
         return fig, ax
-
 
     def plot_pair_corr_function_time_av(self, Ndataset = 0, act_idx_bounds = None, use_merged = False, save = False,):
         """

@@ -1076,7 +1076,7 @@ def two_sample_test(x, y, x_err = None, y_err = None, one_sided = False, small_s
     else:
         return test_statistic, 2 * p_val
 
-def calc_acf_for_arr(arr, conv_idx = 0, nlags = 0, alpha = 0.05):
+def calc_acf_for_arr(arr, conv_idx = 0, nlags = 0, alpha = 0.05, missing='conservative'):
     """
     takes def arr with shape (Nframes, Nexp) and calculates the acf for each act and each exp 
     nlags = 0: calculate all lags
@@ -1091,30 +1091,43 @@ def calc_acf_for_arr(arr, conv_idx = 0, nlags = 0, alpha = 0.05):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
 
-            acf_res, confint = acf(arr[conv_idx:,i], nlags = nlags, alpha = alpha)
+            acf_res, confint = acf(arr[conv_idx:,i], nlags = nlags, alpha = alpha, missing = missing)
             acf_arr[-(nlags + 1):, i] = acf_res
             confint_arr[-(nlags + 1):, :, i] = confint
     return acf_arr, confint_arr
 
+
+
 def estimate_effective_sample_size(acf_vals, acf_err_vals = None, confint_vals = None, 
                                    max_lag=None, max_lag_threshold=0, 
-                                   simple_threshold = 0.1, use_abs_sum=False):
+                                   simple_threshold = 0.1, use_error_bound = True, use_abs_sum=False):
     """ acf_vals must not be non ie. start from steady state.
     if max_lag is None, the first lag where the confidence interval is below threshold is used.
 
     Returns tau, tau_simple
     """
 
-    if max_lag is None:
+    # If the error bound is not used, the acf values are used directly
+    if use_error_bound:
         if acf_err_vals is None:
             val = confint_vals[:,0]
         else:
-            val = acf_vals[:max_lag] - acf_err_vals[:max_lag]     
+            val = acf_vals[:max_lag] - acf_err_vals[:max_lag] 
+    else:
+        val = acf_vals[:max_lag]
+
+    # Calculate max lag if not provided
+    if max_lag is None:       
         try:
             max_lag = np.where(val < max_lag_threshold)[0][0]
-            tau_simple = np.where(val < np.abs(simple_threshold))[0][0]
         except:
             return np.nan, np.nan
+
+    # Calculate when the autocorrelation function is below the simple threshold
+    try: 
+        tau_simple = np.where(val < np.abs(simple_threshold))[0][0]
+    except:
+        tau_simple = np.nan
   
     # Sum the autocorrelation values
     if use_abs_sum:
@@ -1123,3 +1136,4 @@ def estimate_effective_sample_size(acf_vals, acf_err_vals = None, confint_vals =
         tau = 1 + 2 * np.sum(acf_vals[1:max_lag])
 
     return tau, tau_simple
+
