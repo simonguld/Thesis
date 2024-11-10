@@ -189,7 +189,7 @@ class AnalyseDefects:
         def_arr = self.get_arrays_full(Ndataset = Ndataset)[0]
         act_list = self.act_list[Ndataset]
    
-        corr_time_arr = np.zeros((4, def_arr.shape[-2], def_arr.shape[-1],)) 
+        corr_time_arr = np.zeros((2, def_arr.shape[-2], def_arr.shape[-1],)) 
   
         max_lag = acf_dict['max_lag']
         alpha = acf_dict['alpha']
@@ -215,10 +215,8 @@ class AnalyseDefects:
                                                             max_lag = max_lag, 
                                                             max_lag_threshold=max_lag_threshold, 
                                                             simple_threshold=simple_threshold,
-                                                            )   
-                Neff = nf / tau
-                Neff_simple = nf / tau_simple   
-                corr_time_arr[:, j, k] = [tau, tau_simple, Neff, Neff_simple]
+                                                            )     
+                corr_time_arr[:, j, k] = [tau, tau_simple]
         if save:
             np.save(os.path.join(self.output_paths[Ndataset], 'corr_time.npy'), corr_time_arr)
         return corr_time_arr

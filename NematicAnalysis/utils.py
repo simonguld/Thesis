@@ -1,5 +1,5 @@
 # Author: Simon Guldager Andersen
-# Date(last edit): June 2 2024
+# Date(last edit): Nov. 11 - 2024
 
 ## Imports:
 import os
@@ -22,9 +22,7 @@ from statsmodels.tsa.stattools import adfuller, acf
 import massPy as mp
 
 sys.path.append('C:\\Users\\Simon Andersen\\Projects\\Projects\\Appstat2022\\External_Functions')
-from ExternalFunctions import Chi2Regression, BinnedLH, UnbinnedLH
-from ExternalFunctions import nice_string_output, add_text_to_ax    # Useful functions to print fit results on figure
-
+from ExternalFunctions import Chi2Regression
 
 # Helper functions -------------------------------------------------------------------
 
@@ -1076,28 +1074,6 @@ def two_sample_test(x, y, x_err = None, y_err = None, one_sided = False, small_s
     else:
         return test_statistic, 2 * p_val
 
-def calc_acf_for_arr(arr, conv_idx = 0, nlags = 0, alpha = 0.05, missing='conservative'):
-    """
-    takes def arr with shape (Nframes, Nexp) and calculates the acf for each act and each exp 
-    nlags = 0: calculate all lags
-    """
-    Nframes, Nexp = arr.shape
-    nlags = Nframes - conv_idx if nlags == 0 else min(Nframes - conv_idx, nlags)
-
-    acf_arr = np.nan * np.zeros((Nframes + 1, Nexp))
-    confint_arr = np.nan * np.zeros((Nframes + 1, 2, Nexp))
-
-    for i in range(Nexp):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-
-            acf_res, confint = acf(arr[conv_idx:,i], nlags = nlags, alpha = alpha, missing = missing)
-            acf_arr[-(nlags + 1):, i] = acf_res
-            confint_arr[-(nlags + 1):, :, i] = confint
-    return acf_arr, confint_arr
-
-
-
 def estimate_effective_sample_size(acf_vals, acf_err_vals = None, confint_vals = None, 
                                    max_lag=None, max_lag_threshold=0, 
                                    simple_threshold = 0.1, use_error_bound = True, use_abs_sum=False):
@@ -1137,3 +1113,93 @@ def estimate_effective_sample_size(acf_vals, acf_err_vals = None, confint_vals =
 
     return tau, tau_simple
 
+def calc_acf_for_arr(arr, conv_idx = 0, nlags = 0, alpha = 0.05, missing = 'conservative'):
+    """
+    arr shape must be (Nframes, Nexp) or (Nframes, Nsomething, Nexp)
+    takes def arr and calculates the acf
+    nlags = 0: calculate all lags
+    """
+    Nframes, Nexp = arr.shape[0], arr.shape[-1]
+    Nsomething = arr.shape[1] if len(arr.shape) == 3 else None
+    nlags = Nframes - conv_idx if nlags == 0 else min(Nframes - conv_idx, nlags)
+
+    acf_arr = np.nan * np.zeros((Nframes + 1, *arr.shape[1:]))
+    confint_arr = np.nan * np.zeros((Nframes + 1, 2, *arr.shape[1:]))
+
+    if Nsomething:
+        for i in range(Nsomething):
+            for j in range(Nexp):
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+
+                    acf_res, confint = acf(arr[conv_idx:,i,j], nlags = nlags, alpha = alpha)
+                    acf_arr[-(nlags + 1):, i, j] = acf_res
+                    confint_arr[-(nlags + 1):, :, i, j] = confint
+    else:
+        for i in range(Nexp):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+
+                acf_res, confint = acf(arr[conv_idx:,i], nlags = nlags, alpha = alpha, missing=missing)
+                acf_arr[-(nlags + 1):, i] = acf_res
+                confint_arr[-(nlags + 1):, :, i] = confint
+    return acf_arr, confint_arr
+
+def calc_corr_time(npz_dict, npz_target_name, npz_path, use_error_bound = True,
+                    acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.1},
+                    save = True):  
+    """ npz_obj is the npz file containing the target array
+    target array must have shape (Nframes, Nact, Nexp) or (Nframes, Nsomething, Nact, Nexp)
+    """
+    
+    arr = npz_dict[npz_target_name]
+    act_list = npz_dict['act_list']
+    conv_list = npz_dict['conv_list']
+
+    corr_time_arr = np.zeros((2, *arr.shape[1:],)) 
+    Nsomething = arr.shape[1] if len(arr.shape) == 4 else None
+
+    max_lag = acf_dict['max_lag']
+    alpha = acf_dict['alpha']
+    max_lag_threshold = acf_dict['max_lag_threshold']
+    simple_threshold = acf_dict['simple_threshold']
+
+    for j, act in enumerate(act_list):
+        act_idx = act_list.index(act) if type(act_list) is list else np.where(act_list == act)[0][0]
+
+        conv_idx = conv_list[act_idx]
+        nf = arr.shape[0] - conv_idx
+        nlags= int(nf * acf_dict['nlags_frac'])  
+    
+        arr_vals =  arr[:, :, act_idx, :] if Nsomething else arr[:, act_idx, :]
+        acf_arr, confint_arr = calc_acf_for_arr(arr_vals, conv_idx = conv_idx, nlags = nlags, alpha = alpha)
+
+        if Nsomething:
+            for k in range(arr.shape[-1]):
+                for i in range(arr.shape[1]):
+                    acf_vals = acf_arr[-(nlags + 1):, i, k]
+                    confint_vals = confint_arr[-(nlags + 1):, :, i, k]
+
+                    tau, tau_simple = estimate_effective_sample_size(acf_vals,
+                                                                confint_vals = confint_vals, 
+                                                                max_lag = max_lag, 
+                                                                max_lag_threshold = max_lag_threshold, 
+                                                                simple_threshold = simple_threshold,
+                                                                use_error_bound = use_error_bound)    
+                    corr_time_arr[:, i, j, k] = [tau, tau_simple,]
+        else:
+            for k in range(arr.shape[-1]):
+                acf_vals = acf_arr[- (nlags + 1):,k]
+                confint_vals = confint_arr[- (nlags + 1):,:,k]
+
+                tau, tau_simple = estimate_effective_sample_size(acf_vals,
+                                                            confint_vals = confint_vals, 
+                                                            max_lag = max_lag, 
+                                                            max_lag_threshold = max_lag_threshold, 
+                                                            simple_threshold = simple_threshold,
+                                                            use_error_bound = use_error_bound)   
+                corr_time_arr[:, j, k] = [tau, tau_simple,]
+    if save:
+        npz_dict['corr_time_arr'] = corr_time_arr 
+        np.savez(npz_path, **npz_dict)
+    return corr_time_arr
