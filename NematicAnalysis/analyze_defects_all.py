@@ -57,29 +57,26 @@ def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False
 
 
 def main():
-    do_extraction = True
+    do_extraction = False
     do_basic_analysis = True
-    do_hyperuniformity_analysis = True
+    do_hyperuniformity_analysis = False
     do_merge = True
 
     system_size_list = [256, 512, 1024, 2048]
-    system_size_list = [512]
+   # system_size_list = [2048]
     mode = 'all' # 'all' or 'short'
-
-    # order parameter parameters
-    shift = False
-    shift_by_act = 0.022
-    Nscale = False
 
     # hyperuniformity parameters
     act_idx_bounds=[0,None]
     Npoints_to_fit = 8
     Nbounds = [[3,n] for n in range(5,9)]
-
     dens_fluc_dict = dict(fit_densities = True, act_idx_bounds = [0, None], weighted_mean = False, window_idx_bounds = [30 - Npoints_to_fit, None])
     
-
     
+    calc_pcf = False
+    acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.2}
+    temp_corr_simple = True
+
     for i, LL in enumerate(system_size_list):
         print('\nStarting analysis for L =', LL)
         time0 = time.time()
@@ -93,17 +90,14 @@ def main():
         if do_basic_analysis:
             if do_hyperuniformity_analysis:
                 sfac_dict = dict(Npoints_bounds = Nbounds[i], act_idx_bounds = act_idx_bounds,)
-                ad.analyze_defects(dens_fluc_dict=dens_fluc_dict, sfac_dict=sfac_dict)
+                ad.analyze_defects(temp_corr_simple=temp_corr_simple,
+                                   acf_dict=acf_dict,
+                                   dens_fluc_dict=dens_fluc_dict, 
+                                   sfac_dict=sfac_dict, 
+                                   alc_pcf=calc_pcf)
             else:
-                ad.analyze_defects()
-
-            # find density at shift_by_act
-            av_def_merged = ad.get_arrays_av(use_merged = True)[-1]
-            shift_by_def = av_def_merged[ad.act_list[0].index(shift_by_act)][0]
-
-            order_param_function = lambda def_arr, av_def, LX: order_param_func(def_arr, av_def, LX, shift_by_def = shift_by_def, shift = shift)
-            sus_binder_dict = dict(Nscale = Nscale, order_param_func = order_param_function)
-            ad.analyze_defects(sus_binder_dict=sus_binder_dict)
+                ad.analyze_defects(acf_dict=acf_dict,
+                                   temp_corr_simple=temp_corr_simple)
         if do_merge:
             ad.merge_results()
 

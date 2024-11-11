@@ -23,6 +23,7 @@ import massPy as mp
 
 sys.path.append('C:\\Users\\Simon Andersen\\Projects\\Projects\\Appstat2022\\External_Functions')
 from ExternalFunctions import Chi2Regression
+from ExternalFunctions import nice_string_output, add_text_to_ax  # Useful functions to print fit results on figure
 
 # Helper functions -------------------------------------------------------------------
 

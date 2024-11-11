@@ -85,7 +85,7 @@ class AnalyseDefects:
                 if not os.path.isfile(os.path.join(self.output_paths[i], 'kbins.txt')) or not os.path.isfile(os.path.join(self.output_paths[i], 'rad.npy')):
                     subsubdir = os.path.join(subdir_full, os.listdir(subdir_full)[0])
                     dir_kbins = os.path.join(subsubdir, 'kbins.txt')
-                    dir_rad = os.path.join(subsubdir, 'rad.npy')
+                    dir_rad = os.path.join(subsubdir, 'rad.txt')
 
                     # save the kbins and rad if they exist
                     if os.path.isfile(dir_kbins):
@@ -182,8 +182,8 @@ class AnalyseDefects:
                 np.save(os.path.join(self.output_paths[N], 'pcf_time_av.npy'), pcf_time_av)
         return
 
-    def calc_corr_time(self, Ndataset = 0, 
-                         acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.1},
+    def calc_corr_time(self, Ndataset = 0, use_error_bound=False,
+                         acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.15},
                          save = True):  
 
         def_arr = self.get_arrays_full(Ndataset = Ndataset)[0]
@@ -215,14 +215,15 @@ class AnalyseDefects:
                                                             max_lag = max_lag, 
                                                             max_lag_threshold=max_lag_threshold, 
                                                             simple_threshold=simple_threshold,
-                                                            )     
+                                                            use_error_bound=use_error_bound)     
                 corr_time_arr[:, j, k] = [tau, tau_simple]
         if save:
             np.save(os.path.join(self.output_paths[Ndataset], 'corr_time.npy'), corr_time_arr)
         return corr_time_arr
 
-    def calc_binder_susceptibility(self, Ndataset = 0, Nframes = None, order_param_func = None, Nscale = True, \
-                                return_order_param = False, save = True):
+    def calc_susceptibility(self, Ndataset = 0, Nframes = None, 
+                            order_param_func = None, Nscale = True, \
+                            save = True):
 
         act_list = self.act_list[Ndataset]
         conv_list = self.conv_list[Ndataset]
@@ -238,63 +239,19 @@ class AnalyseDefects:
             order_param = order_param_func(def_arr, av_def, self.LX[Ndataset])
         
         # Initialize arrays
-        binder_cumulants = np.zeros((Nact, 2)) * np.nan
-        sus = np.nan * np.zeros_like(binder_cumulants)
-        order_param_av = np.nan * np.zeros((*order_param.shape[:-1], 2))
-
-        p4 = order_param ** 4
-        p2 = order_param ** 2
-
-        p4_av = np.zeros_like(binder_cumulants)
-        p2_av = np.zeros_like(binder_cumulants)
+        sus = np.zeros((Nact, 2)) * np.nan
 
         for i, act in enumerate(act_list):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=RuntimeWarning)
-
                 Nfirst_frame = conv_list[i] if Nframes is None else max(def_arr.shape[0] - Nframes, conv_list[i])
-
-                # calculate the average and standard deviation of p4 and p2
-                Npoints = p4[Nfirst_frame:,i,:].size
-                p4_av[i, 0] = np.nanmean(np.nanmean(p4[Nfirst_frame:,i,:]))
-                p2_av[i, 0] = np.nanmean(np.nanmean(p2[Nfirst_frame:,i,:]))
-                p4_av[i, 1] = np.nanstd(p4[Nfirst_frame:,i,:]) / np.sqrt(Npoints)
-                p2_av[i, 1] = np.nanstd(p2[Nfirst_frame:,i,:]) / np.sqrt(Npoints)
-            
-                # calculate the order parameter
-                order_param_av[Nfirst_frame:, i, 0] = np.nanmean(order_param[Nfirst_frame:, i, :], axis = -1)
-                order_param_av[Nfirst_frame:, i, 1] = np.nanstd(order_param[Nfirst_frame:, i, :], axis = -1) / np.sqrt(self.Nframes[Ndataset] - Nfirst_frame)
-
-                # calculate the susceptibility for each experiment and average over them
-                var_per_exp = np.nanmean(order_param[Nfirst_frame:, i, :] ** 2, axis = 0) - np.nanmean(order_param[Nfirst_frame:, i, :], axis = 0) ** 2
-                #sus[i, 0] = np.nanmean(var_per_exp) 
-
                 sus[i,0] = np.nanmean(order_param[Nfirst_frame:, i, :] ** 2,) - np.nanmean(order_param[Nfirst_frame:, i, :]) ** 2
-                #  sus[i, 1] = np.nanstd(var_per_exp) / np.sqrt(self.Nexp[Ndataset])
-
-        # calculate binder cumulants
-        binder_cumulants[:,0] = 1 - p4_av[:, 0] / (3 * p2_av[:, 0] ** 2)
-
-        # find the error in the binder cumulant
-        dzdx = lambda x, y: - 1 / (3 * y ** 2)
-        dzdy = lambda x, y: 2 * x / (3 * y ** 3)
-
-        correlation = calc_corr_matrix(np.array([p4_av[:,0], p2_av[:,0]]).T)[0,1]
-        binder_cumulants[:,1] = prop_err(dzdx, dzdy, p4_av[:,0], p2_av[:,0], p4_av[:,1], p2_av[:,1], correlation = correlation)
-
-
         if Nscale:
-            sus *= av_def[:, 0][:, None]
-
+            sus /= av_def[:, 0][:, None]
+            sus[:,1] = np.sqrt(sus[:,0]/av_def[:,0]) * av_def[:,1]
         if save:
             np.save(os.path.join(output_path, 'susceptibility.npy'), sus)
-            np.save(os.path.join(output_path, 'binder_cumulants.npy'), binder_cumulants)
-            np.save(os.path.join(output_path, 'order_param_av.npy'), order_param_av)
-
-        if return_order_param:
-            return sus, binder_cumulants, order_param_av
-        else:
-            return sus, binder_cumulants
+        return sus
     
     def print_params(self, Ndataset = 0, act = [], param_keys = ['nstart', 'nsteps']):
         """
@@ -397,9 +354,9 @@ class AnalyseDefects:
         else:
             return defect_arr_av, var_counts_av, dens_fluc_av, av_defects
 
-    def get_binder_susceptibility(self, Ndataset = 0, use_merged = False):
+    def get_susceptibility(self, Ndataset = 0, use_merged = False):
         """
-        returns binder_cumulants, susceptibility, order_param_av
+        returns susceptibility
         """
         if use_merged:
             output_path = os.path.join(self.output_main_path, 'merged_results')
@@ -411,13 +368,11 @@ class AnalyseDefects:
         else:
             output_path = self.output_paths[Ndataset]
         try:
-            binder_cumulants = np.load(os.path.join(output_path, 'binder_cumulants.npy'))
             susceptibility = np.load(os.path.join(output_path, 'susceptibility.npy'))
-            order_param = np.load(os.path.join(output_path, 'order_param_av.npy'))
         except:
-            print('Binder cumulants or susceptibilitites not found. Analyse defects first.')
+            print('Susceptibilitites not found. Analyse defects first.')
             return
-        return binder_cumulants, susceptibility, order_param
+        return susceptibility
 
     def get_sfac_pcf(self, Ndataset = 0, time_av = True, use_merged = False):
         """
@@ -536,7 +491,9 @@ class AnalyseDefects:
                     np.save(os.path.join(self.output_paths[N], 'sfac.npy'), sfac)
                     np.save(os.path.join(self.output_paths[N], 'pcf.npy'), pcf)
 
-    def analyze_defects(self, Ndataset_list = None, temp_corr_simple = True, sus_binder_dict = {}, dens_fluc_dict = {}, sfac_dict = {}):
+    def analyze_defects(self, Ndataset_list = None, temp_corr_simple = True, calc_pcf = False,
+                        acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.2},
+                        sus_dict = {}, dens_fluc_dict = {}, sfac_dict = {}):
 
         Ndataset_list = range(self.Ndata) if Ndataset_list is None else Ndataset_list
 
@@ -552,7 +509,7 @@ class AnalyseDefects:
             if len(np.unique(self.conv_list[N])) == 1:
                 print(f'NB: All simulations are set to converge at the first frame for dataset {N}. To change this, call update_conv_list.\n')
 
-            temp_corr = self.calc_corr_time(N, acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.1})  
+            temp_corr = self.calc_corr_time(N, acf_dict = acf_dict)  
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=RuntimeWarning)
@@ -565,16 +522,15 @@ class AnalyseDefects:
                 av_defects = np.zeros((self.Nactivity[N], 2))      
                 
                 for i, _ in enumerate(self.act_list[N]):
-                    Nind_samples = np.nansum(temp_corr[-1, i, :,]) if temp_corr_simple else np.nansum(temp_corr[-2, i, :,])
+                    Nind_samples = np.nansum((self.Nframes[N] - self.conv_list[N][i]) * np.ones(self.Nexp[N]) / (temp_corr[1, i, :,] if temp_corr_simple else temp_corr[0, i, :,]))
                     av_defects[i, 0] = np.nanmean(defect_arr[self.conv_list[N][i]:, i, :])
                     av_defects[i, 1] = np.nanstd(defect_arr[self.conv_list[N][i]:, i, :]) / np.sqrt(Nind_samples)     
    
                 np.save(os.path.join(self.output_paths[N], 'av_defects.npy'), av_defects)
 
-                self.__calc_sfac_pcf(N,)
+                self.__calc_sfac_pcf(N, calculate_pcf = calc_pcf)
+                self.calc_susceptibility(N, **sus_dict)
 
-            if sus_binder_dict != {}:
-                self.calc_binder_susceptibility(N, **sus_binder_dict)
             if dens_fluc_dict != {}:
                 self.analyze_hyperuniformity(N, plot = False, **dens_fluc_dict)
             if sfac_dict != {}:
@@ -597,7 +553,7 @@ class AnalyseDefects:
 
         try:
             defect_arr_av, var_counts_av, dens_fluc_av, av_counts_av, av_defects = self.get_arrays_av(Nbase, return_av_counts = True)
-            binder_cumulants, susceptibility, order_param_av = self.get_binder_susceptibility(Nbase)
+            susceptibility = self.get_susceptibility(Nbase)
             alpha_fluc = np.load(os.path.join(self.output_paths[Nbase], f'alpha_list_{suffix}.npy'))
             corr_time_av = np.load(os.path.join(self.output_paths[Nbase], 'corr_time_av.npy'))
         except:
@@ -632,9 +588,7 @@ class AnalyseDefects:
             corr_time_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'corr_time_av.npy'))
 
             susceptibility[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
-            binder_cumulants[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'binder_cumulants.npy'))
-            order_param_av[-Nbase_frames:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'order_param_av.npy'))[-Nbase_frames:]
-
+ 
             alpha_fluc[act_idx_list] = np.load(os.path.join(self.output_paths[N], f'alpha_list_{suffix}.npy'))
       
             if include_sfac:  
@@ -658,8 +612,6 @@ class AnalyseDefects:
             np.save(os.path.join(save_path, 'dens_fluc_av.npy'), dens_fluc_av)
             np.save(os.path.join(save_path, 'av_defects.npy'), av_defects)
             np.save(os.path.join(save_path, 'susceptibility.npy'), susceptibility)
-            np.save(os.path.join(save_path, 'binder_cumulants.npy'), binder_cumulants)
-            np.save(os.path.join(save_path, 'order_param_av.npy'), order_param_av)
             np.save(os.path.join(save_path, f'alpha_list_{suffix}.npy'), alpha_fluc)
             np.save(os.path.join(save_path, 'corr_time_av.npy'), corr_time_av)
             if include_sfac:
@@ -673,7 +625,7 @@ class AnalyseDefects:
                 np.save(os.path.join(save_path, f'fit_params_sfac_time_av.npy'), fit_params_sfac_time_av)
         return
     
-    def merge_sus_binder(self, save_path = None, save = True):
+    def merge_sus(self, save_path = None, save = True):
 
         if save_path is None:
             save_path = os.path.join(self.output_main_path, 'merged_results')
@@ -681,13 +633,9 @@ class AnalyseDefects:
             os.makedirs(save_path)
 
         Nbase = np.argmin(self.priorities)
-        Nbase_frames = self.Nframes[Nbase]
-        window_sizes = self.window_sizes[Nbase]
 
         try:
             susceptibility = np.load(os.path.join(self.output_paths[Nbase], 'susceptibility.npy'))
-            binder_cumulants = np.load(os.path.join(self.output_paths[Nbase], 'binder_cumulants.npy'))
-            order_param_av = np.load(os.path.join(self.output_paths[Nbase], 'order_param_av.npy'))
         except:
             print('Base dataset not found. Analyse defects first.')
             return
@@ -700,17 +648,9 @@ class AnalyseDefects:
             for act in self.act_list[N]:
                 act_idx_list.append(self.act_list[Nbase].index(act))
 
-            #susceptibility[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
-            #binder_cumulants[act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'binder_cumulants.npy'))
             susceptibility[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
-            binder_cumulants[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'binder_cumulants.npy'))
-            order_param_av[-Nbase_frames:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'order_param_av.npy'))[-Nbase_frames:]
-            
         if save:
             np.save(os.path.join(save_path, 'susceptibility.npy'), susceptibility)
-            np.save(os.path.join(save_path, 'binder_cumulants.npy'), binder_cumulants)
-            np.save(os.path.join(save_path, 'order_param_av.npy'), order_param_av)
-
         return
     
     def analyze_hyperuniformity(self, Ndataset = 0, fit_densities = False, fit_dict = {}, window_idx_bounds = None, \
@@ -1239,43 +1179,6 @@ class AnalyseDefects:
                 fig.savefig(os.path.join(output_path, f'figs\\{fig_name}'), dpi = 420, pad_inches=0.15)
             return fig, ax
 
-    def plot_binder_susceptibility(self, Ndataset = 0, act_max = None, act_idx_bounds = None, order_param_string = 'None', use_merged = False):
-
-        output_path, Ndataset = self.__get_outpath_path(Ndataset, use_merged)
-
-        if act_idx_bounds is None:
-            act_idx_bounds = [0, len(self.act_list[Ndataset])]
-
-        act_list = self.act_list[Ndataset][act_idx_bounds[0]:act_idx_bounds[1]]
-        act_max = 0.022 if act_max is None else act_max
-        act_idx_max = act_list.index(act_max)
-     
-        try:
-            binder, sus, order_param = self.get_binder_susceptibility(Ndataset = Ndataset)
-            order_param_time_av = np.nanmean(order_param[:,:,0], axis = 0)
-            order_param_time_av_std = np.nanstd(order_param[:,:,0], axis = 0) / np.sqrt(order_param.shape[0])
-        except:
-            print('Susceptibilities not found. Analyse defects first.')
-            return
-        
-        fig, ax = plt.subplots(2,2, figsize = (20, 20))
-        ax = ax.flatten()
-        ax[0].errorbar(act_list, sus[:,0], sus[:,1], marker = 'o', alpha=.3,) # label = r'$\chi(\zeta)$ = \langle N_d (\zeta) \rangle \langle \delta \psi^2 \rangle $')
-        ax[1].errorbar(act_list, binder[:,0], binder[:,1], marker = 'o', alpha=.3,) # label=r'$U_B(\zeta) = 1 - \frac{\langle \psi^4 \rangle}{3 \langle \psi^2 \rangle ^2}$')
-        ax[2].errorbar(act_list, sus[:,0] / sus[act_idx_max,0], sus[:,1] / sus[act_idx_max,0], marker = 'o', alpha=.3)
-        ax[3].errorbar(act_list, order_param_time_av, order_param_time_av_std, label = rf'{order_param_string}', marker = 'o', alpha=.3)
-
-        ax[0].legend()
-        ax[1].legend()
-        ax[3].legend()
-        ax[0].set(ylabel = 'Susceptibility',)
-        ax[1].set(ylabel = 'Binder Cumulant',)
-        ax[2].set(ylabel = 'Susceptibility (normalized)',)
-        ax[3].set(ylabel = 'Order Parameter (\psi)',)
-        fig.suptitle(rf'Time av. of order parameter and its cumulants (L = {self.LX[Ndataset]})')
-        fig.supxlabel(rf'Activity ($\zeta$)')
-        fig.tight_layout()
-        return fig, ax
 
     def plot_hyperuniformity_sfac(self, act_list = None, fit_params = None, Ndataset = 0, act_idx_bounds = None, use_merged = False, save = False):
 
@@ -1385,7 +1288,6 @@ class AnalyseDefects:
         return fig, ax
 
 
-
 def gen_analysis_dict(LL, mode):
 
     dshort = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\nematic_analysis{LL}_LL0.05', \
@@ -1402,11 +1304,12 @@ def gen_analysis_dict(LL, mode):
         if LL == 2048:
             defect_list = [dshort, dlong]
         else:
-            defect_list = [dshort, dlong, dvery_long, dvery_long2] if LL in [256, 512] else [dshort, dlong, dvery_long]
+            defect_list = [dshort, dlong, dvery_long, dvery_long2] if LL in [256] else [dshort, dlong, dvery_long]
     else:
         defect_list = [dshort]
     
     return defect_list
+
 
 def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False):
 
@@ -1433,9 +1336,7 @@ def main():
     mode = 'all' # 'all' or 'short'
 
     # order parameter parameters
-    shift = False
-    shift_by_act = 0.022
-    Nscale = False
+    Nscale = True
 
     # hyperuniformity parameters
     act_idx_bounds=[0,None]
@@ -1443,7 +1344,6 @@ def main():
     Nbounds = [[3,n] for n in range(5,9)]
 
     dens_fluc_dict = dict(fit_densities = True, act_idx_bounds = [0, None], weighted_mean = False, window_idx_bounds = [30 - Npoints_to_fit, None])
-
 
 
     for i, LL in enumerate(system_size_list):
@@ -1462,14 +1362,6 @@ def main():
                 ad.analyze_defects(dens_fluc_dict=dens_fluc_dict, sfac_dict=sfac_dict)
             else:
                 ad.analyze_defects()
-
-            # find density at shift_by_act
-            av_def_merged = ad.get_arrays_av(use_merged = True)[-1]
-            shift_by_def = av_def_merged[ad.act_list[0].index(shift_by_act)][0]
-
-            order_param_function = lambda def_arr, av_def, LX: order_param_func(def_arr, av_def, LX, shift_by_def = shift_by_def, shift = shift)
-            sus_binder_dict = dict(Nscale = Nscale, order_param_func = order_param_function)
-            ad.analyze_defects(sus_binder_dict=sus_binder_dict)
         if do_merge:
             ad.merge_results()
 
