@@ -93,7 +93,7 @@ void Nematic::Configure()
   preinit_flag = false;
   cout << "Preinitialization done. ... ";
 
-  InsertPlusDefect(100, 100, 100, 0);
+  //InsertPlusDefect(100, 100, 100, 0);
   //InsertMinusDefect(300, 200, 50, 0);
 }
 
