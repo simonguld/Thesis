@@ -271,7 +271,7 @@ def get_defect_list(archive, idx_first_frame=0, Nframes = None, verbose=False, a
         t_start = time.time()
 
     # Loop over frames
-    for i in range(idx_first_frame, Nframes - idx_first_frame):
+    for i in range(idx_first_frame, idx_first_frame + Nframes):
         # Load frame
 
         frame_num = i if archive_path is None else get_frame_number(i, archive_path, archive.__dict__['ninfo'])
