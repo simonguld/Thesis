@@ -334,7 +334,9 @@ class AnalyseDefectsAll:
             fig.savefig(os.path.join(self.output_path, 'susceptibility.png'), dpi = 420, pad_inches=0.25)
         return fig, ax
 
-    def plot_sfac_per_activity(self, LX, Npoints_to_fit = 5, act_list = None, scaling_exp_list = [], scaling_label_list = [], ax = None,):
+    def plot_sfac_per_activity(self, LX, Npoints_to_fit = 5, act_list = None, 
+                               scaling_exp_list = [], scaling_label_list = [], 
+                               ax = None,):
 
         """
         returns fit_params_time_av
@@ -393,7 +395,7 @@ class AnalyseDefectsAll:
  
         ax.legend(ncol=3)
         ax.set_xlabel(r'Norm of wavenumber ($k$)')
-        ax.set_ylabel(r'Time av. structure factor')
+        ax.set_ylabel(r'Structure factor ($\overline{S}$)')
 
         if not subplot:
             fig.tight_layout()
