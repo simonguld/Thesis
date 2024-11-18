@@ -641,7 +641,7 @@ def do_poisson_clustering_improved(def_arr, L, Ntrial, Ncmin = 2, use_grid = Fal
             N = int(N)
         
             if use_grid:
-                defect_positions = (np.random.randint(0, int(L/2), size = (N, 2), dtype=int) * 2).astype(float)
+                defect_positions = (np.random.randint(0, int(L), size = (N, 2), dtype=int)).astype(float)
             else:
                 defect_positions = np.random.rand(N, 2) * L   
 
