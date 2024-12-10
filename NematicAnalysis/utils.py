@@ -302,7 +302,8 @@ def get_defect_arr_from_frame(defect_dict):
         defect_positions[i] = defect['pos']
     return defect_positions
 
-def get_defect_density(defect_list, area, return_charges=False, save = False, save_path = None,):
+
+def get_defect_density(defect_list, area, return_charges=False, save_path = None,):
         """
         Get defect density for each frame in archive
         parameters:
@@ -310,7 +311,7 @@ def get_defect_density(defect_list, area, return_charges=False, save = False, sa
             area: Area of system
             return_charges: if True, return list of densities of positive and negative defects
         returns:
-            dens_defects: list of defect densities
+            dens_defects: array of defect densities (Nframes, 3) if return_charges is True else (Nframes, 2)
         """
 
         if return_charges:
@@ -324,6 +325,10 @@ def get_defect_density(defect_list, area, return_charges=False, save = False, sa
 
                 dens_pos_defects.append(nposdef / area)
                 dens_neg_defects.append(nnegdef / area)
+
+            if save_path is not None:
+                np.savetxt(save_path + '_pos', dens_pos_defects)
+                np.savetxt(save_path + '_neg', dens_neg_defects)
             return dens_pos_defects, dens_neg_defects
         else:
             dens_defects = []
@@ -331,9 +336,10 @@ def get_defect_density(defect_list, area, return_charges=False, save = False, sa
                 # Get no. of defects
                 ndef = len(defects)
                 dens_defects.append(ndef / area)
-            if save:
+            if save_path is not None:
                 np.savetxt(save_path, dens_defects)
             return dens_defects
+
 
 def calc_density_fluctuations(points_arr, window_sizes, boundaries = None, N_center_points=None, Ndof=1, dist_to_boundaries=None, normalize=False):
     """
