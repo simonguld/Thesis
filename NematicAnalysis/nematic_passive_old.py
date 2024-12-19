@@ -452,10 +452,10 @@ def main():
             lneutral_filter_fwd = np.nan * np.zeros((len(act_fwd),2)) 
             lneutral_filter_bck = np.nan * np.zeros((len(act_bck),2))
 
-            lneutral_per_frame_fwd = np.nan * np.zeros((Nact_fwd, 2)) 
-            lneutral_per_frame_bck = np.nan * np.zeros((Nact_bck, 2))
-            qpeak_per_frame_fwd = np.nan * np.zeros((Nact_fwd, 2))    
-            qpeak_per_frame_bck = np.nan * np.zeros((Nact_bck, 2))
+            lneutral_per_frame_fwd = np.zeros((Nact_fwd, 2)) 
+            lneutral_per_frame_bck = np.zeros((Nact_bck, 2))
+            qpeak_per_frame_fwd = np.zeros((Nact_fwd, 2))    
+            qpeak_per_frame_bck = np.zeros((Nact_bck, 2))
 
             for i, _ in enumerate(act_fwd):
                 ff_idx = int(conv_list_fwd[i])
@@ -550,87 +550,123 @@ def main():
             for i, act in enumerate(act_fwd):
                 if act <= act_min_lneutral_fwd:
                     continue
-                if np.allclose(def_arr_fwd[:,i], 0):
-                    continue
+
+                idx_max = np.argmax(q_av_fwd[i, qpeak_idx_min:, 0])
+                qpeak_fwd[i,0] = rmax_list[idx_max + qpeak_idx_min]
+                qpeak_fwd[i,1] = np.diff(rmax_list)[0] / 2
 
                 arg_neutral_lower = np.argwhere(q_av_fwd[i, :, 0]-q_av_fwd[i, :, 1] <= 0)
-                if len(arg_neutral_lower) > 0:
-                    idx_neutral = arg_neutral_lower[0][0]
-
-                    lneutral_fwd[i,0] = rmax_list[int(idx_neutral)] 
-                    lneutral_fwd[i,1] = np.diff(rmax_list)[0] / 2
+                arg_neutral_upper = np.argwhere(q_av_fwd[i, :, 0]+q_av_fwd[i, :, 1] <= 0)
+                if len(arg_neutral_lower) == 0:
+                    try:
+                        idx_neutral_lower = np.argwhere(q_av_fwd[i, :, 0]-2*q_av_fwd[i, :, 1] <= 0)[0][0]
+                    except:
+                        idx_neutral_lower = -2
                 else:
-                    idx_neutral = np.nan
+                    idx_neutral_lower = arg_neutral_lower[0][0]
+                if len(arg_neutral_upper) == 0:
+                    idx_neutral_upper = idx_neutral_lower + 1
+                else:
+                    idx_neutral_upper = arg_neutral_upper[0][0]
 
-                idx_max = np.argmax(q_av_fwd[i, qpeak_idx_min:, 0]-q_av_fwd[i, qpeak_idx_min:, 1])
-                if not idx_max + qpeak_idx_min > idx_neutral:
-                    qpeak_fwd[i,0] =  rmax_list[idx_max + qpeak_idx_min]# qfilter_bck[i, idx_max + qpeak_idx_min]
-                    qpeak_fwd[i,1] = np.diff(rmax_list)[0] / 2
-
+                idx_neutral = np.median([idx_neutral_lower, idx_neutral_upper])
+    
+                if idx_neutral % 1 != 0.:
+                    lneutral_fwd[i,0] = (rmax_list[idx_neutral_upper] + rmax_list[idx_neutral_lower]) / 2
+                else:
+                    lneutral_fwd[i,0] = rmax_list[int(idx_neutral)] 
+                lneutral_fwd[i,1] = max((rmax_list[idx_neutral_upper] - rmax_list[idx_neutral_lower]) / 2, np.diff(rmax_list)[0] / 2)
 
                 # repeat for filter
                 ff_idx = int(conv_list_bck[i])
                 if act > actm_filter_fwd:
                     continue
 
+                idx_max = np.argmax(qfilter_fwd[i, qpeak_idx_min:, 0])
+                qpeak_filter_fwd[i,0] = rmax_list[idx_max + qpeak_idx_min] #qfilter_fwd[i, idx_max + qpeak_idx_min]
+                qpeak_filter_fwd[i,1] = np.diff(rmax_list)[0] / 2
+
                 arg_neutral_lower = np.argwhere(qfilter_fwd[i, :, 0]-qfilter_fwd[i, :, 1] <= 0)
-                if len(arg_neutral_lower) > 0:
-                    idx_neutral = arg_neutral_lower[0][0]
-
-                    lneutral_filter_fwd[i,0] = rmax_list[int(idx_neutral)] 
-                    lneutral_filter_fwd[i,1] = np.diff(rmax_list)[0] / 2
+                arg_neutral_upper = np.argwhere(qfilter_fwd[i, :, 0]+qfilter_fwd[i, :, 1] <= 0)
+                if len(arg_neutral_lower) == 0:
+                    try:
+                        idx_neutral_lower = np.argwhere(qfilter_fwd[i, :, 0]-2*qfilter_fwd[i, :, 1] <= 0)[0][0]
+                    except:
+                        idx_neutral_lower = -2
                 else:
-                    idx_neutral = np.nan
+                    idx_neutral_lower = arg_neutral_lower[0][0]
+                if len(arg_neutral_upper) == 0:
+                    idx_neutral_upper = idx_neutral_lower + 1
+                else:
+                    idx_neutral_upper = arg_neutral_upper[0][0]
+                
+                idx_neutral = np.median([idx_neutral_lower, idx_neutral_upper])   
+                if idx_neutral % 1 != 0.:
+                    lneutral_filter_fwd[i,0] = (rmax_list[idx_neutral_upper] + rmax_list[idx_neutral_lower]) / 2
+                else:
+                    lneutral_filter_fwd[i,0] = rmax_list[int(idx_neutral)]
+                lneutral_filter_fwd[i,1] = max((rmax_list[idx_neutral_upper] - rmax_list[idx_neutral_lower]) / 2, np.diff(rmax_list)[0] / 2)
 
-                idx_max = np.argmax(qfilter_fwd[i, qpeak_idx_min:, 0]-qfilter_fwd[i, qpeak_idx_min:, 1])
-                if not idx_max + qpeak_idx_min > idx_neutral:
-                    qpeak_filter_fwd[i,0] =  rmax_list[idx_max + qpeak_idx_min]# qfilter_bck[i, idx_max + qpeak_idx_min]
-                    qpeak_filter_fwd[i,1] = np.diff(rmax_list)[0] / 2
-
-
-            
             for i, act in enumerate(act_bck):
                 if act <= act_min_lneutral_bck:
                     continue
-                if np.allclose(def_arr_bck[:,i], 0):
-                    continue
+
+                idx_max = np.argmax(q_av_bck[i, qpeak_idx_min:, 0])
+                qpeak_bck[i,0] =  rmax_list[idx_max + qpeak_idx_min]# q_av_bck[i, idx_max + qpeak_idx_min]
+                qpeak_bck[i,1] = np.diff(rmax_list)[0] / 2
 
                 arg_neutral_lower = np.argwhere(q_av_bck[i, :, 0]-q_av_bck[i, :, 1] <= 0)
-                if len(arg_neutral_lower) > 0:
-                    idx_neutral = arg_neutral_lower[0][0]
+                arg_neutral_upper = np.argwhere(q_av_bck[i, :, 0]+q_av_bck[i, :, 1] <= 0)
+                if len(arg_neutral_lower) == 0:
+                    try:
+                        idx_neutral_lower = np.argwhere(q_av_bck[i, :, 0]-2*q_av_bck[i, :, 1] <= 0)[0][0]
+                    except:
+                        idx_neutral_lower = -2
+                else:
+                    idx_neutral_lower = arg_neutral_lower[0][0]
+                if len(arg_neutral_upper) == 0:
+                    idx_neutral_upper = idx_neutral_lower + 1
+                else:
+                    idx_neutral_upper = arg_neutral_upper[0][0]
 
+                idx_neutral = np.median([idx_neutral_lower, idx_neutral_upper])
+                if idx_neutral % 1 != 0.:
+                    lneutral_bck[i,0] = (rmax_list[idx_neutral_upper] + rmax_list[idx_neutral_lower]) / 2
+                else:
                     lneutral_bck[i,0] = rmax_list[int(idx_neutral)] 
-                    lneutral_bck[i,1] = np.diff(rmax_list)[0] / 2
-                else:  
-                    idx_neutral = np.nan
+                lneutral_bck[i,1] = max((rmax_list[idx_neutral_upper] - rmax_list[idx_neutral_lower]) / 2, np.diff(rmax_list)[0] / 2)
 
-                idx_max = np.argmax(q_av_bck[i, qpeak_idx_min:, 0]-q_av_bck[i, qpeak_idx_min:, 1])
-                if not idx_max + qpeak_idx_min > idx_neutral:
-                    qpeak_bck[i,0] =  rmax_list[idx_max + qpeak_idx_min]# qfilter_bck[i, idx_max + qpeak_idx_min]
-                    qpeak_bck[i,1] = np.diff(rmax_list)[0] / 2
-
- 
-            
                 # repeat for filter
                 ff_idx = int(conv_list_bck[i])
                 if act > actm_filter_bck:
                     continue
 
+                idx_max = np.argmax(qfilter_bck[i, qpeak_idx_min:, 0])
+                qpeak_filter_bck[i,0] =  rmax_list[idx_max + qpeak_idx_min]# qfilter_bck[i, idx_max + qpeak_idx_min]
+                qpeak_filter_bck[i,1] = np.diff(rmax_list)[0] / 2
+
                 arg_neutral_lower = np.argwhere(qfilter_bck[i, :, 0]-qfilter_bck[i, :, 1] <= 0)
-                if len(arg_neutral_lower) > 0:
-                    idx_neutral = arg_neutral_lower[0][0]
-
-                    lneutral_filter_bck[i,0] = rmax_list[int(idx_neutral)] 
-                    lneutral_filter_bck[i,1] = np.diff(rmax_list)[0] / 2
+                arg_neutral_upper = np.argwhere(qfilter_bck[i, :, 0]+qfilter_bck[i, :, 1] <= 0)
+                if len(arg_neutral_lower) == 0:
+                    try:
+                        idx_neutral_lower = np.argwhere(qfilter_bck[i, :, 0]-2*qfilter_bck[i, :, 1] <= 0)[0][0]
+                    except:
+                        idx_neutral_lower = -2
                 else:
-                    idx_neutral = np.nan
+                    idx_neutral_lower = arg_neutral_lower[0][0]
+                if len(arg_neutral_upper) == 0:
+                    idx_neutral_upper = idx_neutral_lower + 1
+                else:
+                    idx_neutral_upper = arg_neutral_upper[0][0]
+                
+                idx_neutral = np.median([idx_neutral_lower, idx_neutral_upper])
 
-                idx_max = np.argmax(qfilter_bck[i, qpeak_idx_min:, 0]-qfilter_bck[i, qpeak_idx_min:, 1])
-                if not idx_max + qpeak_idx_min > idx_neutral:
-                    qpeak_filter_bck[i,0] =  rmax_list[idx_max + qpeak_idx_min]# qfilter_bck[i, idx_max + qpeak_idx_min]
-                    qpeak_filter_bck[i,1] = np.diff(rmax_list)[0] / 2
+                if idx_neutral % 1 != 0.:
+                    lneutral_filter_bck[i,0] = (rmax_list[idx_neutral_upper] + rmax_list[idx_neutral_lower]) / 2
+                else:
+                    lneutral_filter_bck[i,0] = rmax_list[int(idx_neutral)]
                 
-                
+                lneutral_filter_bck[i,1] = max((rmax_list[idx_neutral_upper] - rmax_list[idx_neutral_lower]) / 2, np.diff(rmax_list)[0] / 2)
 
         
             if replace_shifted:
@@ -641,9 +677,6 @@ def main():
 
             if analyze_per_frame:
                 for j, act in enumerate(act_fwd):
-
-                    if np.allclose(def_arr_fwd[:,j], 0):
-                        continue
 
                     vals = clp_arr_fwd[:, :, 1, j]  
                     filter = (qmax_arr_fwd[:,j] == 0)
@@ -656,15 +689,12 @@ def main():
                     #  print(np.argmax(vals[i,qpeak_idx_min:]) + qpeak_idx_min)
                     if len(lm_list) > 2:
                         lneutral_per_frame_fwd[j,0] = np.mean(lm_list)
-                        lneutral_per_frame_fwd[j,1] = np.std(lm_list, ddof = 1) / np.sqrt(len(lm_list) / uncertainty_multiplier)
+                        lneutral_per_frame_fwd[j,1] = np.std(lm_list, ddof = 1) / np.sqrt(len(lm_list))
                     if len(qp_list) > 2:
                         qpeak_per_frame_fwd[j,0] = np.mean(qp_list)
-                        qpeak_per_frame_fwd[j,1] = np.std(qp_list, ddof = 1) / np.sqrt(len(qp_list) / uncertainty_multiplier)
+                        qpeak_per_frame_fwd[j,1] = np.std(qp_list, ddof = 1) / np.sqrt(len(qp_list))
 
                 for j, act in enumerate(act_bck):
-
-                    if np.allclose(def_arr_bck[:,j], 0):
-                        continue
 
                     vals = clp_arr_bck[:, :, 1, j]  
                     filter = (qmax_arr_bck[:,j] == 0)
@@ -676,10 +706,10 @@ def main():
                         qp_list.append(rmax_list[np.argmax(vals[i,qpeak_idx_min:]) + qpeak_idx_min])
                     if len(lm_list) > 2:
                         lneutral_per_frame_bck[j,0] = np.mean(lm_list)
-                        lneutral_per_frame_bck[j,1] = np.std(lm_list, ddof = 1) / np.sqrt(len(lm_list) / uncertainty_multiplier)
+                        lneutral_per_frame_bck[j,1] = np.std(lm_list, ddof = 1) / np.sqrt(len(lm_list))
                     if len(qp_list) > 2:
                         qpeak_per_frame_bck[j,0] = np.mean(qp_list)
-                        qpeak_per_frame_bck[j,1] = np.std(qp_list, ddof = 1) / np.sqrt(len(qp_list) / uncertainty_multiplier)
+                        qpeak_per_frame_bck[j,1] = np.std(qp_list, ddof = 1) / np.sqrt(len(qp_list))
 
                 # save data
                 np.save(os.path.join(out_path, 'lneutral_per_frame_fwd.npy'), lneutral_per_frame_fwd)
@@ -701,6 +731,8 @@ def main():
             np.save(os.path.join(out_path, 'q_av_bck.npy'), q_av_bck)
             np.save(os.path.join(out_path, 'qfilter_fwd.npy'), qfilter_fwd)
             np.save(os.path.join(out_path, 'qfilter_bck.npy'), qfilter_bck)
+
+            
 
             np.save(os.path.join(out_path, 'qpeak_fwd.npy'), qpeak_fwd)
             np.save(os.path.join(out_path, 'qpeak_bck.npy'), qpeak_bck)
