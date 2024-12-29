@@ -380,7 +380,7 @@ class AnalyseDefectsAll:
                 label = scaling_label_list[i] if len(scaling_label_list) > 0 else None
                 ax.plot(x, sfac_av[k_begin_lines_idx, act_idx, 0] * x**scaling_exp / x[-1]**scaling_exp, '--', label = label, alpha=0.5,) 
 
-        ax.hlines(1, 0, kmax+0.2, label=r'Possion', linestyles='dashed', colors='k')
+        ax.hlines(1, 0, kmax+0.2, label=r'Poisson', linestyles='dashed', colors='k')
         ax.set_xscale('log')
         ax.set_yscale('log')
         ax.set_xlabel(r'Wavenumber')
