@@ -455,7 +455,8 @@ class AnalyseDefects:
                 exp_list, exp_dir_list = zip(*sorted(zip(exp_list, exp_dir_list)))
 
                 for j, (exp, exp_dir) in enumerate(zip(exp_list, exp_dir_list)):
-                    defect_arr[:, i, j] = np.loadtxt(os.path.join(exp_dir, 'Ndefects_act{}_exp{}.txt'.format(act, exp)))[-self.Nframes[N]:]
+                    def_temp = np.loadtxt(os.path.join(exp_dir, 'Ndefects_act{}_exp{}.txt'.format(act, exp)))[-self.Nframes[N]:]
+                    defect_arr[-def_temp.shape[0]:, i, j] = def_temp
 
                     counts = np.loadtxt(os.path.join(exp_dir, 'av_counts_act{}_exp{}.txt'.format(act,exp)))[-self.Nframes[N]:,:]
                     vars = np.loadtxt(os.path.join(exp_dir, 'count_fluctuations_act{}_exp{}.txt'.format(act,exp)))[-self.Nframes[N]:,:]
