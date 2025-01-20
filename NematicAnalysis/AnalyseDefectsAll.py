@@ -18,12 +18,12 @@ from plot_utils import *
 class AnalyseDefectsAll:
     def __init__(self, system_size_list, ):
         self.LX = system_size_list
-        self.inputs_paths = [f"data\\nematic_analysis{LX}_LL0.05\\merged_results" for LX in self.LX]
+        self.inputs_paths = [f"data\\na{LX}\\merged_results" for LX in self.LX]
         self.act_list = [list(np.load(os.path.join(path, "activity_list.npy"))) for path in self.inputs_paths]
         self.window_sizes = [list(np.load(os.path.join(path, 'window_sizes.npy'))) for path in self.inputs_paths]
         self.Nactivity = [len(act) for act in self.act_list]
 
-        self.output_path = "data\\nematic_analysis_all"
+        self.output_path = "data\\na_all"
 
     def get_av_defects(self, LX = 512, density = True):
         """
@@ -74,17 +74,18 @@ class AnalyseDefectsAll:
 
     def get_alpha(self, LX,):
         """
-        returns time_av_of_fits, fit_params_of_time_av
+        returns time_av_of_fits, fit_params_of_time_av, fit_params_time_av_counts
         """     
         idx = self.LX.index(LX)
 
         try:
             time_av_of_fits = np.load(os.path.join(self.inputs_paths[idx], f'alpha_list_sfac.npy'))
             fit_params_of_time_av = np.load(os.path.join(self.inputs_paths[idx], f'fit_params_sfac_time_av.npy'))
+            fit_params_time_av_counts = np.load(os.path.join(self.inputs_paths[idx], f'fit_params_count.npy'))
         except:
             print('Alpha list not found. Analyse hyperuniformity first.')
             return
-        return time_av_of_fits, fit_params_of_time_av
+        return time_av_of_fits, fit_params_of_time_av, fit_params_time_av_counts
 
     def plot_av_defects(self, fit_dict = {}, LX_list = None, act_bounds = None, \
                         plot_density = True, figsize=(7,4.5), verbose = False, ax = None,inset_box=None):

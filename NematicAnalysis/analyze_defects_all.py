@@ -17,7 +17,7 @@ os.chdir(dir_path)
 ### FUNCTIONS ----------------------------------------------------------------------------------
 
 
-def gen_analysis_dict(LL, mode):
+def gen_analysis_dict_old(LL, mode):
 
     dshort = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\nematic_analysis{LL}_LL0.05', \
               suffix = "short", priority = -1, LX = LL, Nframes = 181)
@@ -39,6 +39,24 @@ def gen_analysis_dict(LL, mode):
     
     return defect_list
 
+def gen_analysis_dict(LL, mode):
+
+    dshort = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\na{LL}', \
+              suffix = "short", priority = 0, LX = LL, Nframes = 181)
+    dlong = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\na{LL}l', \
+                suffix = "long", priority = 1, LX = LL, Nframes = 400)
+    dvery_long = dict(path =  f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\na{LL}vl', \
+                    suffix = "very_long", priority = 2, LX = LL, Nframes = 1500)
+    
+    if mode == 'all':
+        if LL == 2048:
+            defect_list = [dshort, dlong]
+        else:
+            defect_list = [dshort, dlong, dvery_long]
+    else:
+        defect_list = [dshort]
+    
+    return defect_list
 
 def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False):
 
@@ -68,22 +86,23 @@ def main():
 
     # hyperuniformity parameters
     act_idx_bounds=[0,None]
-    Npoints_to_fit = 8
+    Npoints_to_fit = 10
     Nbounds = [[3,n] for n in range(5,9)]
-    dens_fluc_dict = dict(fit_densities = True, act_idx_bounds = [0, None], weighted_mean = False, window_idx_bounds = [30 - Npoints_to_fit, None])
+    dens_fluc_dict = dict(act_idx_bounds = [0, None], window_idx_bounds = [50 - Npoints_to_fit, None])
     
     
-    calc_pcf = False
-    acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.2}
+    calc_pcf = True
+    nlags_list = [750/2, 750/2, 750/2, 400/2]
     temp_corr_simple = True
 
-    for i, LL in enumerate(system_size_list):
+    for i, LL in enumerate(system_size_list[-1:]):
         print('\nStarting analysis for L =', LL)
         time0 = time.time()
-        output_path = f'data\\nematic_analysis{LL}_LL0.05'
+        output_path = f'data\\na{LL}'
         
         defect_list = gen_analysis_dict(LL, mode)
         ad = AnalyseDefects(defect_list, output_path=output_path)
+        acf_dict = {'nlags_frac': 0.7, 'nlags': nlags_list[i], 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.2}
 
         if do_extraction:
             ad.extract_results()
@@ -94,7 +113,7 @@ def main():
                                    acf_dict=acf_dict,
                                    dens_fluc_dict=dens_fluc_dict, 
                                    sfac_dict=sfac_dict, 
-                                   alc_pcf=calc_pcf)
+                                   calc_pcf=calc_pcf)
             else:
                 ad.analyze_defects(acf_dict=acf_dict,
                                    temp_corr_simple=temp_corr_simple)
