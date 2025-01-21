@@ -623,14 +623,6 @@ class AnalyseDefects:
             if len(np.unique(self.conv_list[N])) == 1:
                 print(f'NB: All simulations are set to converge at the first frame for dataset {N}. To change this, call update_conv_list.\n')
 
-            # calculate number variance of observation windows
-            var_counts = np.zeros((len(self.window_sizes[N]), self.Nactivity[N], 2))
-            for i, _ in enumerate(self.act_list[N]):
-                vars = np.nanvar(av_counts[self.conv_list[N][i]:, :, i, :], axis = 0)
-                var_counts[:, i, 0] = np.nanvar(av_counts[self.conv_list[N][i]:, :, i, :], axis = (0,-1))
-                var_counts[:, i, 1] = np.nanstd(vars, axis = -1) / np.sqrt(self.Nexp[N])
-            np.save(os.path.join(self.output_paths[N], f'var_counts_av{self.count_suffix}.npy'), var_counts)
-        
             # calculate the correlation time
             def_arr_path = os.path.join(self.output_paths[N], f'defect_arr.npz')
             count_arr_path = os.path.join(self.output_paths[N], f'av_counts{self.count_suffix}.npz')

@@ -302,7 +302,6 @@ def get_defect_arr_from_frame(defect_dict):
         defect_positions[i] = defect['pos']
     return defect_positions
 
-
 def get_defect_density(defect_list, area, return_charges=False, save_path = None,):
         """
         Get defect density for each frame in archive
@@ -339,7 +338,6 @@ def get_defect_density(defect_list, area, return_charges=False, save_path = None
             if save_path is not None:
                 np.savetxt(save_path, dens_defects)
             return dens_defects
-
 
 def calc_density_fluctuations(points_arr, window_sizes, boundaries = None, N_center_points=None, Ndof=1, dist_to_boundaries=None, normalize=False):
     """
@@ -769,6 +767,55 @@ def extract_clustering_results(clustering_dict, Nframes, conv_list, act_list, ac
         np.save(os.path.join(save_path, 'cl_std.npy'), cl_std)
     return cluster_arr, cl_mean, cl_std
 
+def generate_points_uniform(Ndefect_arr, L, Ntrial, use_grid = False, save_path = None):
+    """
+    This function generates uniformly distributed points on a square domain. It allows for Ndefects from frame to frame,
+    and also allows for Ntrial to be bigger than the number of defect entries in def_arr. For each run, it randomly selects
+    Ndefects from def_arr and simulates points uniformly.
+
+    Parameters:
+        Ndefect_arr: array of total number of defects for each frame. 
+                 Each entry corresponds to the number of defects for a frame. Format: (Nframes) or (Nframes, Nexp)
+        L: length of the square box
+        Ntrial: number of trials per column in def_arr
+        use_grid: if True, the points are generated on a grid with lattice spacing 1
+        save_path: path to save the generated points as a .pkl file. If None, the points are not saved.
+
+    Returns: list of point arrays with Ntrial entries, each of which has the format (Npoints, 2)
+
+    """
+
+    # initialize list of points
+    points_list_uniform = []
+
+    # flatten the array if it has multiple experiments
+    Ndefect_arr = Ndefect_arr.flatten()
+
+    # choose Ntrial random entries from the column
+    Nlist = np.random.choice(Ndefect_arr, size = Ntrial)
+    
+    for j in range(Ntrial):
+
+        try:
+            N = int(Nlist[j])
+        except:
+            # if N is nan, skip
+            continue
+    
+        # generate points
+        if use_grid:
+            defect_positions = (np.random.randint(0, int(L), size = (N, 2), dtype=int)).astype(float)
+        else:
+            defect_positions = np.random.rand(N, 2) * L   
+
+        points_list_uniform.append(defect_positions)  
+
+    if save_path is not None:
+        # save as pickle
+        with open(save_path, 'wb') as f:
+            pickle.dump(points_list_uniform, f)
+
+    return points_list_uniform
 
 ### Functions for statistical analysis ------------------------------------------------
 

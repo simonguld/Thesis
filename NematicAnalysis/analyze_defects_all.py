@@ -78,13 +78,13 @@ def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False
 def main():
     do_extraction = False
     do_basic_analysis = True
-    do_hyperuniformity_analysis = True
+    do_hyperuniformity_analysis = False
     do_merge = True
 
     system_size_list_full = [256, 512, 1024, 2048]
-    system_size_list = [2048]
+    system_size_list = system_size_list_full #[2048]
     mode = 'all' # 'all' or 'short'
-    count_suffix = '_periodic_rm0.1' #_rm0.1'
+    count_suffix_list = ['', '', '', '_periodic_rm0.1'] #_rm0.1'
 
     # hyperuniformity parameters
     act_idx_bounds=[0,None]
@@ -103,6 +103,7 @@ def main():
         time0 = time.time()
         output_path = f'data\\na{LL}'
         nlags = nlags_list[system_size_list_full.index(LL)]
+        count_suffix = count_suffix_list[system_size_list_full.index(LL)]
         
         defect_list = gen_analysis_dict(LL, mode)
         ad = AnalyseDefects(defect_list, output_path=output_path, count_suffix=count_suffix)
