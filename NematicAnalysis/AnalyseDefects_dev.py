@@ -27,7 +27,7 @@ from plot_utils import *
 
 
 class AnalyseDefects:
-    def __init__(self, input_list, output_path = 'data'):
+    def __init__(self, input_list, output_path = 'data', count_suffix = ''):
         """"
         input_list: list of dictionaries. Each dictionary contains the following keys:
         "path": path to the defect folder
@@ -44,6 +44,7 @@ class AnalyseDefects:
         self.priorities = [input["priority"] for input in input_list]
         self.LX = [int(input["LX"]) for input in input_list]
         self.Nframes = [int(input["Nframes"]) for input in input_list]
+        self.count_suffix = count_suffix
 
         self.output_main_path = output_path 
         self.output_paths = [os.path.join(self.output_main_path, self.suffixes[i]) for i in range(self.Ndata)]
@@ -158,6 +159,32 @@ class AnalyseDefects:
             np.save(os.path.join(self.output_paths[Ndataset], save_name + '.npy'), output_arr)
         return output_arr if return_arr else None
  
+    def __calc_time_av(self, Ndataset, data_arr, temp_corr_arr, \
+                       temp_corr_simple = True, ddof = 1, save_name = None,):
+        """
+        data_arr must have shape (Nframes, Nsomething, Nact, Nexp)
+        returns an array of shape (Nsomething, Nact, 2)
+        """
+
+        Nframes, Nsomething, Nact, Nexp = data_arr.shape
+        N = Ndataset
+        time_av = np.nan * np.zeros((Nsomething, Nact, 2))
+     
+        for i in range(Nact):
+            ff_idx = self.conv_list[N][i]
+
+            Nsamples = (Nframes - ff_idx) * np.ones((Nsomething, Nexp)) - np.nansum(np.isnan(data_arr[ff_idx:, :, i, :]),axis=(0))
+            Nind_samples = np.nansum(Nsamples / temp_corr_arr[1 if temp_corr_simple else 0, :, i, :,], axis = -1)
+        
+            time_av[:, i, 0]  = np.nanmean(data_arr[self.conv_list[N][i]:, :, i, :], axis = (0, -1))
+            time_av[:, i, 1] = np.nanstd(data_arr[self.conv_list[N][i]:, :, i, :], axis = (0, -1), ddof = ddof) / np.sqrt(Nind_samples)
+        
+        if save_name is not None:
+            np.save(os.path.join(self.output_paths[N], save_name + '.npy'), time_av)
+            return
+        else:
+            return time_av
+
     def __calc_sfac_pcf(self, Ndataset = 0, acf_dict = {}, temp_corr_simple = True, ddof = 1, calculate_pcf = True,):
         
         N = Ndataset
@@ -178,14 +205,15 @@ class AnalyseDefects:
         sfac_temp_corr = self.est_corr_time(sfac_dict, npz_target_name='sfac', \
                                             npz_path = sfac_path, Ndataset = N, \
                                             acf_dict = acf_dict, use_error_bound = False)
-        for i, _ in enumerate(self.act_list[N]):
-            if temp_corr_simple:
-                Nind_samples = np.nansum((Nframes - self.conv_list[N][i]) * np.ones((Nkbins, Nexp)) / sfac_temp_corr[1, :, i, :,])
-            else:
-                Nind_samples = np.nansum((Nframes - self.conv_list[N][i]) * np.ones((Nkbins, Nexp)) / sfac_temp_corr[0, :, i, :,])
-            
-            sfac_mean_err = np.nanmean(sfac_err[self.conv_list[N][i]:, :, i, :], axis = (0, -1))   
-            sfac_time_av[:, i, 0] = np.nanmean(sfac[self.conv_list[N][i]:, :, i, :], axis = (0, -1))
+        
+        for i in range(Nact):
+            ff_idx = self.conv_list[N][i]
+
+            Nsamples = (Nframes - ff_idx) * np.ones((Nkbins, Nexp)) - np.nansum(np.isnan(sfac[ff_idx:, :, i, :]),axis=(0))
+            Nind_samples = np.nansum(Nsamples / sfac_temp_corr[1 if temp_corr_simple else 0, :, i, :,], axis = -1)
+
+            sfac_mean_err = np.nanmean(sfac_err[self.conv_list[N][i]:, :, i, :], axis = (0, -1)) 
+            sfac_time_av[:, i, 0]  = np.nanmean(sfac[self.conv_list[N][i]:, :, i, :], axis = (0, -1))
             sfac_time_av[:, i, 1] = (sfac_mean_err + np.nanstd(sfac[self.conv_list[N][i]:, :, i, :], axis = (0, -1), ddof = ddof)) / np.sqrt(Nind_samples)
 
         np.save(os.path.join(self.output_paths[N], 'sfac_time_av.npy'), sfac_time_av)
@@ -198,23 +226,12 @@ class AnalyseDefects:
             pcf_path = os.path.join(self.output_paths[N], 'pcf.npz')
             pcf = np.load(pcf_path, 'pcf.npz', allow_pickle=True)['pcf']
             pcf_dict = dict(np.load(pcf_path, allow_pickle = True))
-            pcf_time_av = np.nan * np.zeros((pcf.shape[1], pcf.shape[2], 2))
-
+    
             self.__calc_av_over_exp(pcf, N, return_arr = False, save_name = 'pcf_av', save = True)
-
             pcf_temp_corr = self.est_corr_time(pcf_dict, npz_target_name='pcf', \
                                             npz_path = pcf_path, Ndataset = N, \
-                                            acf_dict = acf_dict, use_error_bound = False)
-            
-            for i, _ in enumerate(self.act_list[N]):
-                if temp_corr_simple:
-                    Nind_samples = np.nansum((Nframes - self.conv_list[N][i]) * np.ones((pcf.shape[1], Nexp)) / pcf_temp_corr[1, :, i, :,])
-                else:
-                    Nind_samples = np.nansum((Nframes - self.conv_list[N][i]) * np.ones((pcf.shape[1], Nexp)) / pcf_temp_corr[0, :, i, :,])
-            
-                pcf_time_av[:, i, 0]  = np.nanmean(pcf[self.conv_list[N][i]:, :, i, :], axis = (0, -1))
-                pcf_time_av[:, i, 1] = np.nanstd(pcf[self.conv_list[N][i]:, :, i, :], axis = (0, -1), ddof = ddof) / np.sqrt(Nind_samples)
-            np.save(os.path.join(self.output_paths[N], 'pcf_time_av.npy'), pcf_time_av)
+                                            acf_dict = acf_dict, use_error_bound = False)       
+            self.__calc_time_av(N, pcf, pcf_temp_corr, temp_corr_simple = temp_corr_simple, ddof = ddof, save_name = 'pcf_time_av',)  
         return
 
     def est_corr_time(self, npz_dict, npz_target_name, npz_path, Ndataset = 0, use_error_bound = True,
@@ -417,7 +434,7 @@ class AnalyseDefects:
         output_path = self.output_paths[Ndataset]
         try:
             defect_arr = np.load(os.path.join(output_path, 'defect_arr.npz'), allow_pickle = True)['defect_arr']  
-            av_counts = np.load(os.path.join(output_path, 'av_counts.npz'), allow_pickle = True)['av_counts']
+            av_counts = np.load(os.path.join(output_path, f'av_counts{self.count_suffix}.npz'), allow_pickle = True)['av_counts']
         except:
             print('Arrays not found. Analyse defects first.')
             return
@@ -432,8 +449,8 @@ class AnalyseDefects:
 
         try:
             defect_arr_av = np.load(os.path.join(output_path, 'defect_arr_av.npy'))
-            var_counts_av = np.load(os.path.join(output_path, 'var_counts_av.npy'))
-            av_counts_av = np.load(os.path.join(output_path, 'av_counts_av.npy'))
+            var_counts_av = np.load(os.path.join(output_path, f'var_counts_av{self.count_suffix}.npy'))
+            av_counts_av = np.load(os.path.join(output_path, f'av_counts_av{self.count_suffix}.npy'))
             av_defects = np.load(os.path.join(output_path, 'av_defects.npy'))
         except:
             print('Arrays not found. Analyse defects first.')
@@ -552,8 +569,8 @@ class AnalyseDefects:
                     idx_start = min(self.Nframes[N], len(def_temp))
                     defect_arr[-idx_start:, i, j] = def_temp[-idx_start:]   
 
-                    if os.path.isfile(os.path.join(exp_dir, 'av_counts.npy')):
-                        counts = np.load(os.path.join(exp_dir, 'av_counts.npy'))
+                    if os.path.isfile(os.path.join(exp_dir, f'av_counts{self.count_suffix}.npy')):
+                        counts = np.load(os.path.join(exp_dir, f'av_counts{self.count_suffix}.npy'))
                     else:
                         counts = np.loadtxt(os.path.join(exp_dir, 'av_counts_act{}_exp{}.txt'.format(act,exp)))
                     
@@ -582,7 +599,7 @@ class AnalyseDefects:
       
             if save:
                 np.savez(os.path.join(self.output_paths[N], 'defect_arr.npz'), defect_arr = defect_arr)
-                np.savez(os.path.join(self.output_paths[N], 'av_counts.npz'), av_counts = av_counts)
+                np.savez(os.path.join(self.output_paths[N], f'av_counts{self.count_suffix}.npz'), av_counts = av_counts)
 
                 if ext_sfac:
                     np.savez(os.path.join(self.output_paths[N], 'sfac.npz'), sfac_full = sfac, sfac = sfac[:, :, 0, :, :], sfac_err = sfac[:, :, 1, :, :])
@@ -590,7 +607,7 @@ class AnalyseDefects:
 
     def analyze_defects(self, Ndataset_list = None, temp_corr_simple = True, calc_pcf = False,
                         acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.2},
-                        sus_dict = {}, dens_fluc_dict = {}, sfac_dict = {}):
+                        ddof = 1, sus_dict = {}, dens_fluc_dict = {}, sfac_dict = {}):
 
         Ndataset_list = range(self.Ndata) if Ndataset_list is None else Ndataset_list
 
@@ -612,11 +629,11 @@ class AnalyseDefects:
                 vars = np.nanvar(av_counts[self.conv_list[N][i]:, :, i, :], axis = 0)
                 var_counts[:, i, 0] = np.nanvar(av_counts[self.conv_list[N][i]:, :, i, :], axis = (0,-1))
                 var_counts[:, i, 1] = np.nanstd(vars, axis = -1) / np.sqrt(self.Nexp[N])
-            np.save(os.path.join(self.output_paths[N], 'var_counts_av.npy'), var_counts)
+            np.save(os.path.join(self.output_paths[N], f'var_counts_av{self.count_suffix}.npy'), var_counts)
         
             # calculate the correlation time
             def_arr_path = os.path.join(self.output_paths[N], f'defect_arr.npz')
-            count_arr_path = os.path.join(self.output_paths[N], f'av_counts.npz')
+            count_arr_path = os.path.join(self.output_paths[N], f'av_counts{self.count_suffix}.npz')
             def_arr_dict = dict(np.load(def_arr_path, allow_pickle=True))
             count_arr_dict = dict(np.load(count_arr_path, allow_pickle=True))
             def_temp_corr = self.est_corr_time(def_arr_dict, npz_target_name='defect_arr', \
@@ -630,27 +647,29 @@ class AnalyseDefects:
                 warnings.simplefilter("ignore", category=RuntimeWarning)
                 self.__calc_av_over_exp(defect_arr, N, save_name = 'defect_arr_av',)
                 self.__calc_av_over_exp(def_temp_corr, N, save_name = 'def_corr_time_av',)
-       
-                # calculate the average number of defects globally and per observation window
-                av_counts_av = np.zeros((len(self.window_sizes[N]), self.Nactivity[N], 2))
-                av_defects = np.zeros((self.Nactivity[N], 2))      
-                
-                for i, _ in enumerate(self.act_list[N]):
-                    if temp_corr_simple:
-                        Ndef_ind_samples = np.nansum((self.Nframes[N] - self.conv_list[N][i]) * np.ones(self.Nexp[N]) / def_temp_corr[1, i, :,])
-                        Ncount_ind_samples = np.nansum((self.Nframes[N] - self.conv_list[N][i]) * np.ones((len(self.window_sizes[N]),self.Nexp[N])) / (count_temp_corr[1, :, i, :,]))
-                    else:
-                        Ndef_ind_samples = np.nansum((self.Nframes[N] - self.conv_list[N][i]) * np.ones(self.Nexp[N]) / def_temp_corr[0, i, :,])
-                        Ncount_ind_samples = np.nansum((self.Nframes[N] - self.conv_list[N][i]) * np.ones((len(self.window_sizes[N]),self.Nexp[N])) / count_temp_corr[0, :, i, :,])
 
+                # calculate number variance of observation windows
+                var_counts = np.zeros((len(self.window_sizes[N]), self.Nactivity[N], 2))
+                for i, _ in enumerate(self.act_list[N]):
+                    vars = np.nanvar(av_counts[self.conv_list[N][i]:, :, i, :], axis = 0)
+                    var_counts[:, i, 0] = np.nanvar(av_counts[self.conv_list[N][i]:, :, i, :], axis = (0,-1))
+                    var_counts[:, i, 1] = np.nanstd(vars, axis = -1) / np.sqrt(self.Nexp[N])
+                np.save(os.path.join(self.output_paths[N], f'var_counts_av{self.count_suffix}.npy'), var_counts)
+       
+                # calculate the average number of counts
+                self.__calc_time_av(N, av_counts, count_temp_corr, temp_corr_simple = temp_corr_simple, \
+                                    ddof = ddof, save_name = f'av_counts_av{self.count_suffix}',)    
+
+                # calculate the average number of defects globally
+                av_defects = np.zeros((self.Nactivity[N], 2))    
+                for i, _ in enumerate(self.act_list[N]):
+                    Ndef_samples = (self.Nframes[N] - self.conv_list[N][i]) * np.ones(self.Nexp[N])
+                    Ndef_ind_samples = np.nansum(Ndef_samples / def_temp_corr[1 if temp_corr_simple else 0, i, :,], axis = -1)
+    
                     av_defects[i, 0] = np.nanmean(defect_arr[self.conv_list[N][i]:, i, :])
                     av_defects[i, 1] = np.nanstd(defect_arr[self.conv_list[N][i]:, i, :]) / np.sqrt(Ndef_ind_samples) 
-  
-                    av_counts_av[:, i, 0] = np.nanmean(av_counts[self.conv_list[N][i]:, :, i, :], axis = (0, -1))  
-                    av_counts_av[:, i, 1] = np.nanstd(av_counts[self.conv_list[N][i]:, :, i, :], axis = (0, -1)) / np.sqrt(Ncount_ind_samples)                                                                                     
-   
+
                 np.save(os.path.join(self.output_paths[N], 'av_defects.npy'), av_defects)
-                np.save(os.path.join(self.output_paths[N], 'av_counts_av.npy'), av_counts_av)
 
                 self.__calc_sfac_pcf(N, acf_dict = acf_dict, temp_corr_simple = temp_corr_simple, \
                                     calculate_pcf = calc_pcf)
@@ -702,8 +721,8 @@ class AnalyseDefects:
                 act_idx_list.append(self.act_list[Nbase].index(act))
 
             defect_arr_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'defect_arr_av.npy'))[-Nbase_frames:]
-            av_counts_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'av_counts_av.npy'))
-            var_counts_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'var_counts_av.npy'))
+            av_counts_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], f'av_counts_av{self.count_suffix}.npy'))
+            var_counts_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], f'var_counts_av{self.count_suffix}.npy'))
             av_defects[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'av_defects.npy'))
             def_corr_time_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'def_corr_time_av.npy'))
 
@@ -726,8 +745,8 @@ class AnalyseDefects:
             np.save(os.path.join(save_path, 'activity_list.npy'), self.act_list[Nbase])
             np.save(os.path.join(save_path, 'window_sizes.npy'), window_sizes)
             np.save(os.path.join(save_path, 'defect_arr_av.npy'), defect_arr_av)
-            np.save(os.path.join(save_path, 'av_counts_av.npy'), av_counts_av)
-            np.save(os.path.join(save_path, 'var_counts_av.npy'), var_counts_av)
+            np.save(os.path.join(save_path, f'av_counts_av{self.count_suffix}.npy'), av_counts_av)
+            np.save(os.path.join(save_path, f'var_counts_av{self.count_suffix}.npy'), var_counts_av)
             np.save(os.path.join(save_path, 'av_defects.npy'), av_defects)
             np.save(os.path.join(save_path, 'susceptibility.npy'), susceptibility)
             np.save(os.path.join(save_path, 'def_corr_time_av.npy'), def_corr_time_av)
@@ -796,8 +815,8 @@ class AnalyseDefects:
             print(N, act_idx_list)
             
             defect_arr_av[-Nframes:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'defect_arr_av.npy'))
-            av_counts_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'av_counts_av.npy'))
-            var_counts_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'var_counts_av.npy'))
+            av_counts_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], f'av_counts_av{self.count_suffix}.npy'))
+            var_counts_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], f'var_counts_av{self.count_suffix}.npy'))
             av_defects[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'av_defects.npy'))
             def_corr_time_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'def_corr_time_av.npy'))
 
@@ -820,8 +839,8 @@ class AnalyseDefects:
             np.save(os.path.join(save_path, 'activity_list.npy'), act_list_full)
             np.save(os.path.join(save_path, 'window_sizes.npy'), window_sizes)
             np.save(os.path.join(save_path, 'defect_arr_av.npy'), defect_arr_av)
-            np.save(os.path.join(save_path, 'av_counts_av.npy'), av_counts_av)
-            np.save(os.path.join(save_path, 'var_counts_av.npy'), var_counts_av)
+            np.save(os.path.join(save_path, f'av_counts_av{self.count_suffix}.npy'), av_counts_av)
+            np.save(os.path.join(save_path, f'var_counts_av{self.count_suffix}.npy'), var_counts_av)
             np.save(os.path.join(save_path, 'av_defects.npy'), av_defects)
             np.save(os.path.join(save_path, 'susceptibility.npy'), susceptibility)
             np.save(os.path.join(save_path, 'def_corr_time_av.npy'), def_corr_time_av)

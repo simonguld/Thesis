@@ -197,7 +197,7 @@ class AnalyseDefectsAll:
             act_idx_bounds = [0, None] if act_idx_bounds is None else act_idx_bounds
             act_list = self.act_list[i]
             act_list = np.array(act_list[act_idx_bounds[0]:act_idx_bounds[1]])
-
+            alpha_list = alpha_list[act_idx_bounds[0]:act_idx_bounds[1]]
 
             mask = (np.isnan(alpha_list[:, 0])) | (alpha_list[:,0] == 0.1)
             alpha_list = alpha_list[~mask]

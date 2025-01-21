@@ -5,6 +5,7 @@
 
 ## Imports:
 import os
+import sys
 import time
 import numpy as np
 
@@ -77,17 +78,19 @@ def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False
 def main():
     do_extraction = False
     do_basic_analysis = True
-    do_hyperuniformity_analysis = False
+    do_hyperuniformity_analysis = True
     do_merge = True
 
-    system_size_list = [256, 512, 1024, 2048]
-   # system_size_list = [2048]
+    system_size_list_full = [256, 512, 1024, 2048]
+    system_size_list = [2048]
     mode = 'all' # 'all' or 'short'
+    count_suffix = '_periodic_rm0.1' #_rm0.1'
 
     # hyperuniformity parameters
     act_idx_bounds=[0,None]
-    Npoints_to_fit = 10
+    Npoints_to_fit = 15
     Nbounds = [[3,n] for n in range(5,9)]
+    Nbounds_dict = dict(zip(system_size_list_full, Nbounds))
     dens_fluc_dict = dict(act_idx_bounds = [0, None], window_idx_bounds = [50 - Npoints_to_fit, None])
     
     
@@ -95,20 +98,22 @@ def main():
     nlags_list = [750/2, 750/2, 750/2, 400/2]
     temp_corr_simple = True
 
-    for i, LL in enumerate(system_size_list[-1:]):
+    for i, LL in enumerate(system_size_list):
         print('\nStarting analysis for L =', LL)
         time0 = time.time()
         output_path = f'data\\na{LL}'
+        nlags = nlags_list[system_size_list_full.index(LL)]
         
         defect_list = gen_analysis_dict(LL, mode)
-        ad = AnalyseDefects(defect_list, output_path=output_path)
-        acf_dict = {'nlags_frac': 0.7, 'nlags': nlags_list[i], 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.2}
+        ad = AnalyseDefects(defect_list, output_path=output_path, count_suffix=count_suffix)
+        acf_dict = {'nlags_frac': 0.7, 'nlags': nlags, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.2}
 
         if do_extraction:
             ad.extract_results()
         if do_basic_analysis:
             if do_hyperuniformity_analysis:
-                sfac_dict = dict(Npoints_bounds = Nbounds[i], act_idx_bounds = act_idx_bounds,)
+                print(' sfac n bounds:', Nbounds_dict[LL])
+                sfac_dict = dict(Npoints_bounds = Nbounds_dict[LL], act_idx_bounds = act_idx_bounds,)
                 ad.analyze_defects(temp_corr_simple=temp_corr_simple,
                                    acf_dict=acf_dict,
                                    dens_fluc_dict=dens_fluc_dict, 
