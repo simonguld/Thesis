@@ -243,7 +243,7 @@ def main():
     LX = 256
     mode = 'wet'
 
-    lambda_list = [0, 0.1, 0.5, 0.8]
+    lambda_list = [0,] # 0.1, 0.5, 0.8]
     
     extract = False
     find_conv = False
@@ -569,7 +569,7 @@ def main():
 
 
                 # repeat for filter
-                ff_idx = int(conv_list_bck[i])
+                ff_idx = int(conv_list_fwd[i])
                 if act > actm_filter_fwd:
                     continue
 

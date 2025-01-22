@@ -674,86 +674,6 @@ class AnalyseDefects:
                 self.analyze_sfac_time_av(N, **sfac_dict)
         return
 
-    def merge_results_old(self, save_path = None, include_sfac = True, save = True):
-
-        if save_path is None:
-            save_path = os.path.join(self.output_main_path, 'merged_results')
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-
-        Nbase = np.argmin(self.priorities)
-        Nbase_frames = self.Nframes[Nbase]
-        window_sizes = self.window_sizes[Nbase]
-
-        try:
-            defect_arr_av, var_counts_av, av_counts_av, av_defects = self.get_arrays_av(Nbase,)
-            susceptibility = self.get_susceptibility(Nbase)
-            fit_params_count = np.load(os.path.join(self.output_paths[Nbase], f'fit_params_count.npy'))
-            def_corr_time_av = np.load(os.path.join(self.output_paths[Nbase], 'def_corr_time_av.npy'))
-        except:
-            print('Base dataset not found. Analyse defects first.')
-            return
-        
-        if include_sfac:
-            try:
-                kbins, sfac_av, rad, pcf_av = self.get_sfac_pcf(Nbase, time_av = False)
-                sfac_time_av, _, pcf_time_av = self.get_sfac_pcf(Nbase, time_av = True,)[1:]
-                alpha_sfac = np.load(os.path.join(self.output_paths[Nbase], f'alpha_list_sfac.npy'))
-                fit_params_sfac_time_av = np.load(os.path.join(self.output_paths[Nbase], f'fit_params_sfac_time_av.npy'))
-            except:
-                print('Pcf not found. Analyse defects first.')
-
-        # overwrite the activities with the ones from the other datasets according to self.priorities
-        _, Nsorted = zip(*sorted(zip(self.priorities, range(self.Ndata))))
-
-        for N in Nsorted[1:]:
-
-            act_idx_list = []
-            for act in self.act_list[N]:
-                act_idx_list.append(self.act_list[Nbase].index(act))
-
-            defect_arr_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'defect_arr_av.npy'))[-Nbase_frames:]
-            av_counts_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], f'av_counts_av{self.count_suffix}.npy'))
-            var_counts_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], f'var_counts_av{self.count_suffix}.npy'))
-            av_defects[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'av_defects.npy'))
-            def_corr_time_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'def_corr_time_av.npy'))
-
-            susceptibility[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
-            fit_params_count[act_idx_list] = np.load(os.path.join(self.output_paths[N], f'fit_params_count.npy'))
-      
-            if include_sfac:  
-                sfac_av[:, :, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'sfac_av.npy'))[-Nbase_frames:]
-                sfac_time_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'sfac_time_av.npy'))[:]
-
-                pcf_av[:, :, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'pcf_av.npy'))[-Nbase_frames:]
-                pcf_time_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'pcf_time_av.npy'))[:]
-
-                alpha_sfac[act_idx_list] = np.load(os.path.join(self.output_paths[N], f'alpha_list_sfac.npy'))
-
-                fit_params_sfac_time_av[act_idx_list] = np.load(os.path.join(self.output_paths[N], f'fit_params_sfac_time_av.npy'))
-
-            
-        if save:
-            np.save(os.path.join(save_path, 'activity_list.npy'), self.act_list[Nbase])
-            np.save(os.path.join(save_path, 'window_sizes.npy'), window_sizes)
-            np.save(os.path.join(save_path, 'defect_arr_av.npy'), defect_arr_av)
-            np.save(os.path.join(save_path, f'av_counts_av{self.count_suffix}.npy'), av_counts_av)
-            np.save(os.path.join(save_path, f'var_counts_av{self.count_suffix}.npy'), var_counts_av)
-            np.save(os.path.join(save_path, 'av_defects.npy'), av_defects)
-            np.save(os.path.join(save_path, 'susceptibility.npy'), susceptibility)
-            np.save(os.path.join(save_path, 'def_corr_time_av.npy'), def_corr_time_av)
-            np.save(os.path.join(save_path, f'fit_params_count.npy'), fit_params_count)
-            if include_sfac:
-                np.save(os.path.join(save_path, 'sfac_av.npy'), sfac_av)
-                np.save(os.path.join(save_path, 'sfac_time_av.npy'), sfac_time_av)
-                np.save(os.path.join(save_path, 'pcf_av.npy'), pcf_av)
-                np.save(os.path.join(save_path, 'pcf_time_av.npy'), pcf_time_av)
-                np.savetxt(os.path.join(save_path, 'kbins.txt'), kbins)
-                np.save(os.path.join(save_path, 'rad.npy'), rad)
-                np.save(os.path.join(save_path, f'alpha_list_sfac.npy'), alpha_sfac)
-                np.save(os.path.join(save_path, f'fit_params_sfac_time_av.npy'), fit_params_sfac_time_av)
-        return
-    
     def merge_results(self, save_path = None, include_sfac = True, save = True):
         """
         Merge the results from the different datasets according to the priorities in descending order.
@@ -778,8 +698,6 @@ class AnalyseDefects:
         for N in Nsorted:
             act_list_full += self.act_list[N]
 
-        print(f'Base dataset: {Nbase}') 
-        print(act_list_full )
         # initialize arrays
         defect_arr_av = np.nan * np.zeros((Nbase_frames, len(act_list_full), 2))
         var_counts_av = np.nan * np.zeros((len(window_sizes), len(act_list_full), 2))
@@ -797,6 +715,7 @@ class AnalyseDefects:
             pcf_time_av = np.nan * np.zeros((len(rad), len(act_list_full), 2))
             alpha_sfac = np.nan * np.zeros((len(act_list_full), 2))
             fit_params_sfac_time_av = np.nan * np.zeros((len(act_list_full), 4))
+            fit_params_sfac_time_av_unweighted = np.nan * np.zeros((len(act_list_full), 4))
 
         for N in Nsorted:
 
@@ -804,8 +723,7 @@ class AnalyseDefects:
             act_idx_list = []
             for act in self.act_list[N]:
                 act_idx_list.append(act_list_full.index(act))
-            print(N, act_idx_list)
-            
+ 
             defect_arr_av[-Nframes:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], 'defect_arr_av.npy'))
             av_counts_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], f'av_counts_av{self.count_suffix}.npy'))
             var_counts_av[:, act_idx_list, :] = np.load(os.path.join(self.output_paths[N], f'var_counts_av{self.count_suffix}.npy'))
@@ -825,6 +743,7 @@ class AnalyseDefects:
                 alpha_sfac[act_idx_list] = np.load(os.path.join(self.output_paths[N], f'alpha_list_sfac.npy'))
 
                 fit_params_sfac_time_av[act_idx_list] = np.load(os.path.join(self.output_paths[N], f'fit_params_sfac_time_av.npy'))
+                fit_params_sfac_time_av_unweighted[act_idx_list] = np.load(os.path.join(self.output_paths[N], f'fit_params_sfac_time_av_unweighted.npy'))
 
             
         if save:
@@ -846,6 +765,7 @@ class AnalyseDefects:
                 np.save(os.path.join(save_path, 'rad.npy'), rad)
                 np.save(os.path.join(save_path, f'alpha_list_sfac.npy'), alpha_sfac)
                 np.save(os.path.join(save_path, f'fit_params_sfac_time_av.npy'), fit_params_sfac_time_av)
+                np.save(os.path.join(save_path, f'fit_params_sfac_time_av_unweighted.npy'), fit_params_sfac_time_av_unweighted)
         return
 
     def merge_sus(self, save_path = None, save = True):
@@ -941,7 +861,7 @@ class AnalyseDefects:
             np.save(os.path.join(output_path, f'stat_arr_{suffix}.npy'), stat_arr)
         return fit_params, stat_arr
 
-    def analyze_sfac_time_av(self, Ndataset = 0, Npoints_bounds = [3,8], act_idx_bounds = None, use_merged = False, save = True,):
+    def analyze_sfac_time_av_old(self, Ndataset = 0, Npoints_bounds = [3,7], act_idx_bounds = None, use_merged = False, save = True,):
         """
         returns fit_params_time_av
         """
@@ -1004,6 +924,130 @@ class AnalyseDefects:
             np.save(os.path.join(output_path, f'fit_params_sfac_time_av.npy'), fit_params_sfac_time_av)
         return fit_params_sfac_time_av
     
+    def analyze_sfac_time_av(self, Ndataset = 0, Npoints_bounds = [3,7], act_idx_bounds = None,
+                            pval_min = 0.01, save = True, save_plots = True, verbose = False):
+        """
+        returns fit_params_time_av
+        """
+
+        def fit_func(x, alpha, beta):
+                    return beta + alpha * x
+        param_guess = np.array([0.1, 0.1])
+        Nparams = len(param_guess)
+
+        if act_idx_bounds is None:
+            act_idx_bounds = [0, None]
+        act_list = self.act_list[Ndataset][act_idx_bounds[0]:act_idx_bounds[1]] 
+
+        try:
+            kbins, sfac_av = self.get_sfac_pcf(Ndataset, time_av = True,)[0:2]
+            sfac_av = sfac_av[:, act_idx_bounds[0]:act_idx_bounds[1], :]
+        except:
+            print('Time-averaged structure factor or pcf not found. Analyse defects first.')
+            return
+        
+        fit_params_weighted = np.zeros([len(act_list), 4]) * np.nan
+        fit_params_unweighted = np.zeros([len(act_list), 4]) * np.nan
+
+        for i, act in enumerate(act_list):
+            if verbose:
+                print(f'\nAnalyzing activity {act}')
+    
+            it_max = 15
+            sfac_nan_mask = np.isnan(sfac_av[:, i, 0])
+            try:
+                x = np.log(kbins[~sfac_nan_mask])
+                y = np.log(sfac_av[~sfac_nan_mask, i, 0])
+                yerr = sfac_av[~sfac_nan_mask, i, 1] / sfac_av[~sfac_nan_mask, i, 0] 
+            except:
+                continue
+
+            fit_vals = np.nan * np.zeros((Npoints_bounds[1] - Npoints_bounds[0], Nparams))
+            fit_err = np.nan * np.zeros((Npoints_bounds[1] - Npoints_bounds[0], Nparams))
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=np.VisibleDeprecationWarning)
+
+                for j, Npoints_to_fit in enumerate(range(Npoints_bounds[0], Npoints_bounds[1])): 
+                    it = 0        
+                    yerr_mod = yerr.astype(float)   
+                    while it < it_max:
+                        it += 1
+
+                        # increase the error for the first points if the fit is not valid
+                        yerr_mod *= np.sqrt(it)
+                        
+                        fit = do_chi2_fit(fit_func, x[:Npoints_to_fit], y[:Npoints_to_fit], yerr_mod[:Npoints_to_fit],
+                                            param_guess, verbose = False)
+                        Ndof, chi2, pval = get_statistics_from_fit(fit, len(x[:Npoints_to_fit]), subtract_1dof_for_binning = False)
+                        
+                        if pval > pval_min:
+                            fit_vals[j] = fit.values[:] 
+                            fit_err[j] = fit.errors[:]
+                            break
+                    if verbose:
+                        print(f'it: {it}, Npoints: {Npoints_to_fit}, alpha: {fit.values[0]} +/- {fit.errors[0]}, chi2: {chi2}, pval: {pval}')
+            
+                nan_mask = np.isnan(fit_vals[:,0])
+                fit_vals_valid = fit_vals[~nan_mask]
+                fit_err_valid = fit_err[~nan_mask]
+                Nfits_valid = fit_vals_valid.shape[0]
+
+                if len(fit_vals_valid) == 0 or len(fit_err_valid) == 0:
+                    continue
+
+                if Nfits_valid == 1:
+                    fit_params_weighted[i, :Nparams] = fit_vals[0,:]
+                    fit_params_weighted[i, Nparams:] = fit_err[0,:]
+                    fit_params_unweighted[i] = fit_params_weighted[i].astype(float)
+                else:  
+                    alpha_weighted_av, alpha_sem = calc_weighted_mean(fit_vals_valid[:,0], fit_err_valid[:,0])
+                    beta_weighted_av, beta_sem = calc_weighted_mean(fit_vals_valid[:,1], fit_err_valid[:,1])
+                    alpha_sem *= np.sqrt(Nfits_valid)
+                    beta_sem *= np.sqrt(Nfits_valid)
+
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", category=RuntimeWarning)
+                        fit_params_weighted[i, :Nparams] = alpha_weighted_av, beta_weighted_av
+                        fit_params_weighted[i, Nparams:] = alpha_sem, beta_sem
+                        fit_params_unweighted[i, :Nparams] = np.nanmean(fit_vals_valid, axis = 0)   
+                        fit_params_unweighted[i, Nparams:] = np.nanstd(fit_vals_valid, axis = 0)
+        if save:
+            np.save(os.path.join(self.output_paths[Ndataset], f'fit_params_sfac_time_av.npy'), fit_params_weighted)
+            np.save(os.path.join(self.output_paths[Ndataset], f'fit_params_sfac_time_av_unweighted.npy'), fit_params_unweighted)
+
+        if save_plots:
+            kmax_idx = Npoints_bounds[1] - 2
+            kvals = np.linspace(kbins[0], kbins[kmax_idx], 100)
+
+            for i, act in enumerate(act_list):
+                fig, ax = plot_structure_factor(kbins, sfac_av[:,i,0], sfac_av[:, i,1], LX=self.LX[Ndataset])
+
+                if not np.isnan(fit_params_weighted[i, 0]):
+                    yvals_weighted = sfac_av[kmax_idx, i, 0] * kvals ** fit_params_weighted[i, 0] / kvals[-1] ** fit_params_weighted[i, 0]
+                    ax.plot(kvals, yvals_weighted,
+                            label = f'alpha = {fit_params_weighted[i, 0]:.2f} +/- {fit_params_weighted[i, 2]:.2f}, \
+                            beta = {np.exp(fit_params_weighted[i, 1]):.2f} +/- {np.exp(fit_params_weighted[i, 1])*fit_params_weighted[i, 3]:.2f}')
+                if not np.isnan(fit_params_unweighted[i, 0]):
+                    yvals_unweighted = sfac_av[kmax_idx, i, 0] * kvals ** fit_params_unweighted[i, 0] / kvals[-1] ** fit_params_unweighted[i, 0]
+                    ax.plot(kvals,yvals_unweighted,
+                                label = f'alpha_u = {fit_params_unweighted[i, 0]:.2f} +/- {fit_params_unweighted[i, 2]:.2f}, \
+                                beta_u = {np.exp(fit_params_unweighted[i, 1]):.2f} +/- {np.exp(fit_params_unweighted[i, 1])*fit_params_unweighted[i, 3]:.2f}')
+
+                ax.set_title(f'Activity = {act}')
+                ax.grid(True)
+                ax.legend(fontsize=11) 
+
+                fig.tight_layout()
+                fig_savedir = os.path.join(self.output_paths[Ndataset], 'figs', 'sfac')
+                if not os.path.exists(fig_savedir):
+                    os.makedirs(fig_savedir)
+                fig.savefig(os.path.join(fig_savedir, f'sfac_fit_act{act}.png'), dpi = 420)
+                # close the figure to avoid memory issues
+                plt.close(fig)
+                
+        return fit_params_weighted, fit_params_unweighted
+
     def analyze_sfac(self, Ndataset = 0, Npoints_bounds = [3,8], act_idx_bounds = None, use_merged = False, save = True, plot = False):
     
         output_path, Ndataset = self.__get_outpath_path(Ndataset, use_merged)

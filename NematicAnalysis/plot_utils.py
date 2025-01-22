@@ -172,14 +172,14 @@ def plot_frames(ar, archive_path, frame_idx_bounds = [], save = False, save_path
 
     return fig, ax
 
-def plot_structure_factor(kbins, smeans, sstds, k = None, sf_estimated = None):
+def plot_structure_factor(kbins, smeans, sstds, k = None, plot_scaling=False, LX = None, sf_estimated = None):
     """
     Plot structure factor
     """
 
-    k_begin_lines_idx = 3
+    k_begin_lines_idx = 10
     kmin, kmax = np.nanmin(kbins), np.nanmax(kbins)
-    sf_min, sf_max = np.nanmin(smeans), np.nanmax(smeans)
+    #sf_min, sf_max = np.nanmin(smeans), np.nanmax(smeans)
     x = np.linspace(kmin, kbins[k_begin_lines_idx], 10)
 
     fig, ax = plt.subplots()
@@ -188,22 +188,24 @@ def plot_structure_factor(kbins, smeans, sstds, k = None, sf_estimated = None):
         ax.scatter(np.linalg.norm(k, axis = 1), sf_estimated, label='Structure factor', s=2.5, alpha=0.3)
 
     ax.hlines(1, x[0], kmax, label=r'Possion', linestyles='dashed', colors='k')
-    ax.plot(x, smeans[k_begin_lines_idx] * x**0.1 / x[-1]**0.1, label=r'$k^{0.1}$')
-    ax.plot(x, smeans[k_begin_lines_idx] * x**0.2 / x[-1]**0.2, label=r'$k^{0.2}$')
-    ax.plot(x, smeans[k_begin_lines_idx] * x**0.3 /x[-1]**0.3, label=r'$k^{0.3}$')
     ax.errorbar(kbins, smeans, yerr = sstds, fmt = 's-', label = 'Binned means', alpha = .8, color = 'red', ecolor = 'black', markersize = 5)
+
+    if plot_scaling:
+        ax.plot(x, smeans[k_begin_lines_idx] * x**0.1 / x[-1]**0.1, label=r'$k^{0.1}$')
+        ax.plot(x, smeans[k_begin_lines_idx] * x**0.2 / x[-1]**0.2, label=r'$k^{0.2}$')
+        ax.plot(x, smeans[k_begin_lines_idx] * x**0.3 /x[-1]**0.3, label=r'$k^{0.3}$')
 
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xticks(np.logspace(np.log10(kmin), np.log10(kmax), 5), np.round(np.logspace(np.log10(kmin), np.log10(kmax), 5),2))   
-    
-    ax.set_ylim([sf_min/2, sf_max + 3])
-    ax.set_xlim([kmin - 0.01, kmax + 0.1])
     ax.legend(ncol=3, fontsize = 14)
-    ax.set_xlabel(r'$|k|$')
-    ax.set_ylabel(r'$S(k)$')
-    ax.set_title(r'Scaling of structure factor with $k$')
-    fig.tight_layout()
+    ax.set_xlabel(r'Norm of wavenumber ($k$)')
+    ax.set_ylabel(r'Time av. structure factor')
+
+    if LX == 2048:
+            ax.set_xticks([kmin, 0.01, 0.1, kmax], [np.round(kmin,3), 0.01, 0.1, np.round(kmax,1)])
+            ax.set_yticks([0.3, 0.4, 0.6, 1, 5], [0.3, 0.4, 0.6, 1, 5])
+    else:
+        ax.set_xticks([kmin, 0.1, kmax], [np.round(kmin,3), 0.1, np.round(kmax,1)])
     return fig, ax
 
 def plot_pair_corr_function(rad_arr, pcf_arr, act_idx = None, frame = None):

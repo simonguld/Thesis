@@ -76,20 +76,20 @@ def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False
 
 
 def main():
-    do_extraction = False
+    do_extraction = True
     do_basic_analysis = True
-    do_hyperuniformity_analysis = False
+    do_hyperuniformity_analysis = True
     do_merge = True
 
     system_size_list_full = [256, 512, 1024, 2048]
-    system_size_list = system_size_list_full #[2048]
+    system_size_list = [2048] #system_size_list_full #[2048]
     mode = 'all' # 'all' or 'short'
     count_suffix_list = ['', '', '', '_periodic_rm0.1'] #_rm0.1'
 
     # hyperuniformity parameters
     act_idx_bounds=[0,None]
-    Npoints_to_fit = 15
-    Nbounds = [[3,n] for n in range(5,9)]
+    Npoints_to_fit = 20
+    Nbounds = [[3,5], [3,5], [3,6], [3,7]]
     Nbounds_dict = dict(zip(system_size_list_full, Nbounds))
     dens_fluc_dict = dict(act_idx_bounds = [0, None], window_idx_bounds = [50 - Npoints_to_fit, None])
     

@@ -68,7 +68,7 @@ class AnalyseDefectsAll:
             print('Structure factor or pcf not found. Analyse defects first.')
             return
 
-        rad = np.loadtxt(os.path.join(self.inputs_paths[idx], 'rad.txt'))
+        rad = np.load(os.path.join(self.inputs_paths[idx], 'rad.npy'))
         kbins = np.loadtxt(os.path.join(self.inputs_paths[idx], 'kbins.txt'))
         return kbins, sfac_av, rad, pcf_av
 
@@ -174,6 +174,7 @@ class AnalyseDefectsAll:
             return ax if inset_box is None else ax, axin
     
     def plot_alpha_mean_sfac(self, act_idx_bounds = None, time_av = True,\
+                                alpha=0.6, alpha_inset = 0.6, markersize=4,
                                 ax = None, labels=True, inset_box = None):
         
 
@@ -205,10 +206,10 @@ class AnalyseDefectsAll:
             label = f'L = {self.LX[i]}' if labels else None
 
             ax.errorbar(act_list, alpha_list[:, 0], alpha_list[:, 1], fmt = marker_shape[i], label = label,\
-                        alpha = .6, elinewidth=1.5, capsize=1.5, capthick=1, markersize = 4, lw=1, color = f'C{i}')
+                        alpha = alpha, elinewidth=1.5, capsize=1.5, capthick=1, markersize = markersize, lw=1, color = f'C{i}')
             if axin is not None:
                 axin.errorbar(act_list, alpha_list[:, 0], alpha_list[:, 1], fmt = marker_shape_inset[i], label = f'L = {self.LX[i]}',\
-                                alpha = .6, elinewidth=1.5, capsize=1.5, capthick=1, markersize = 4, lw=1, color = f'C{i}')
+                                alpha = alpha_inset, elinewidth=1.5, capsize=1.5, capthick=1, markersize = markersize, lw=1, color = f'C{i}')
 
         if ax is None:
             ax.legend()

@@ -27,6 +27,25 @@ from ExternalFunctions import nice_string_output, add_text_to_ax  # Useful funct
 
 # Helper functions -------------------------------------------------------------------
 
+def gen_analysis_dict(LL, mode):
+
+    dshort = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\na{LL}', \
+              suffix = "short", priority = 0, LX = LL, Nframes = 181)
+    dlong = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\na{LL}l', \
+                suffix = "long", priority = 1, LX = LL, Nframes = 400)
+    dvery_long = dict(path =  f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\na{LL}vl', \
+                    suffix = "very_long", priority = 2, LX = LL, Nframes = 1500)
+    
+    if mode == 'all':
+        if LL == 2048:
+            defect_list = [dshort, dlong]
+        else:
+            defect_list = [dshort, dlong, dvery_long]
+    else:
+        defect_list = [dshort]
+    
+    return defect_list
+
 def move_files(old_path, new_path = None):
     if new_path is None:
         new_path = old_path.replace('_sfac', '')
