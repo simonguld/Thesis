@@ -235,7 +235,9 @@ class AnalyseDefects:
         return
 
     def est_corr_time(self, npz_dict, npz_target_name, npz_path, Ndataset = 0, use_error_bound = True,
-                    acf_dict = {'nlags_frac': 0.5, 'nlags': None, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.1},
+                    acf_dict = {'nlags_frac': 0.5, 'nlags': None, 'max_lag': None, \
+                                'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.15, \
+                                'first_frame_idx': None},
                     save = True):  
         """ npz_obj is the npz file containing the target array
         target array must have shape (Nframes, Nact, Nexp) or (Nframes, Nsomething, Nact, Nexp)
@@ -252,11 +254,16 @@ class AnalyseDefects:
         alpha = acf_dict['alpha']
         max_lag_threshold = acf_dict['max_lag_threshold']
         simple_threshold = acf_dict['simple_threshold']
+        first_frame_idx = acf_dict['first_frame_idx']
 
         for j, act in enumerate(act_list):
             act_idx = act_list.index(act) if type(act_list) is list else np.where(act_list == act)[0][0]
 
-            conv_idx = conv_list[act_idx]
+            if first_frame_idx is None or first_frame_idx > arr.shape[0]:
+                conv_idx = conv_list[act_idx]
+            else: 
+                conv_idx = first_frame_idx
+          #  conv_idx = conv_list[act_idx] if first_frame_idx is None else first_frame_idx
             nf = arr.shape[0] - conv_idx
             nlags= int(nf * acf_dict['nlags_frac']) if acf_dict['nlags'] is None else int(acf_dict['nlags'])
             nlags = int(min(nf * acf_dict['nlags_frac'], nlags))
@@ -1522,28 +1529,6 @@ class AnalyseDefects:
 
 
 
-
-def gen_analysis_dict(LL, mode):
-
-    dshort = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\nematic_analysis{LL}_LL0.05', \
-              suffix = "short", priority = -1, LX = LL, Nframes = 181)
-    dlong = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\nematic_analysis{LL}_LL0.05_long', \
-                suffix = "long", priority = 1, LX = LL, Nframes = 400)
-    priority_vl = 2 if LL == 512 else 3
-    dvery_long = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\nematic_analysis{LL}_LL0.05_very_long',\
-                    suffix = "very_long", priority = priority_vl, LX = LL, Nframes = 1500)
-    dvery_long2 = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\nematic_analysis{LL}_LL0.05_very_long_v2',\
-                    suffix = "very_long2", priority = 3 if priority_vl == 2 else 2, LX = LL, Nframes = 1500)
-
-    if mode == 'all':
-        if LL == 2048:
-            defect_list = [dshort, dlong]
-        else:
-            defect_list = [dshort, dlong, dvery_long, dvery_long2] if LL in [256] else [dshort, dlong, dvery_long]
-    else:
-        defect_list = [dshort]
-    
-    return defect_list
 
 
 def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False):
