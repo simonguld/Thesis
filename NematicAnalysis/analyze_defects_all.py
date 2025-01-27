@@ -78,7 +78,7 @@ def order_param_func(def_arr, av_defects, LX, shift_by_def = None, shift = False
 def main():
     do_extraction = False
     do_basic_analysis = True
-    do_hyperuniformity_analysis = False
+    do_hyperuniformity_analysis = True
     do_merge = True
 
     system_size_list_full = [256, 512, 1024, 2048]
@@ -89,7 +89,8 @@ def main():
     # hyperuniformity parameters
     act_idx_bounds=[0,None]
     Npoints_to_fit = 20
-    Nbounds = [[3,5], [3,5], [3,6], [3,7]]
+    pval_min = 0.05
+    Nbounds = [[4,5], [4,5], [5,6], [8,9]]
     Nbounds_dict = dict(zip(system_size_list_full, Nbounds))
     dens_fluc_dict = dict(act_idx_bounds = [0, None], window_idx_bounds = [50 - Npoints_to_fit, None])
     
@@ -119,7 +120,7 @@ def main():
         if do_basic_analysis:
             if do_hyperuniformity_analysis:
                 print(' sfac n bounds:', Nbounds_dict[LL])
-                sfac_dict = dict(Npoints_bounds = Nbounds_dict[LL], act_idx_bounds = act_idx_bounds,)
+                sfac_dict = dict(Npoints_bounds = Nbounds_dict[LL], act_idx_bounds = act_idx_bounds, pval_min = pval_min)
                 ad.analyze_defects(temp_corr_simple=temp_corr_simple,
                                    acf_dict=acf_dict,
                                    dens_fluc_dict=dens_fluc_dict, 

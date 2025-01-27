@@ -960,7 +960,7 @@ class AnalyseDefects:
             if verbose:
                 print(f'\nAnalyzing activity {act}')
     
-            it_max = 15
+            it_max = 50
             sfac_nan_mask = np.isnan(sfac_av[:, i, 0])
             try:
                 x = np.log(kbins[~sfac_nan_mask])
@@ -979,14 +979,13 @@ class AnalyseDefects:
                     it = 0        
                     yerr_mod = yerr.astype(float)   
                     while it < it_max:
-                        it += 1
-
-                        # increase the error for the first points if the fit is not valid
-                        yerr_mod *= np.sqrt(it)
-                        
                         fit = do_chi2_fit(fit_func, x[:Npoints_to_fit], y[:Npoints_to_fit], yerr_mod[:Npoints_to_fit],
                                             param_guess, verbose = False)
                         Ndof, chi2, pval = get_statistics_from_fit(fit, len(x[:Npoints_to_fit]), subtract_1dof_for_binning = False)
+
+                        it += 1
+                        # increase the error for the first points if the fit is not valid
+                        yerr_mod *= 1.05
                         
                         if pval > pval_min:
                             fit_vals[j] = fit.values[:] 
@@ -1004,8 +1003,8 @@ class AnalyseDefects:
                     continue
 
                 if Nfits_valid == 1:
-                    fit_params_weighted[i, :Nparams] = fit_vals[0,:]
-                    fit_params_weighted[i, Nparams:] = fit_err[0,:]
+                    fit_params_weighted[i, :Nparams] = fit_vals_valid
+                    fit_params_weighted[i, Nparams:] = fit_err_valid
                     fit_params_unweighted[i] = fit_params_weighted[i].astype(float)
                 else:  
                     alpha_weighted_av, alpha_sem = calc_weighted_mean(fit_vals_valid[:,0], fit_err_valid[:,0])
@@ -1049,13 +1048,15 @@ class AnalyseDefects:
                 fig_savedir = os.path.join(self.output_paths[Ndataset], 'figs', 'sfac')
                 if not os.path.exists(fig_savedir):
                     os.makedirs(fig_savedir)
-                fig.savefig(os.path.join(fig_savedir, f'sfac_fit_act{act}.png'), dpi = 420)
+                fig.savefig(os.path.join(fig_savedir, f'sfac_fit_act{act}_Np{Npoints_bounds[0]}.png'), dpi = 420)
                 # close the figure to avoid memory issues
                 plt.close(fig)
                 
         return fit_params_weighted, fit_params_unweighted
 
-    def analyze_sfac(self, Ndataset = 0, Npoints_bounds = [3,8], act_idx_bounds = None, use_merged = False, save = True, plot = False):
+    def analyze_sfac(self, Ndataset = 0, Npoints_bounds = [3,8], \
+                    act_idx_bounds = None, pval_min = 0.01, \
+                    use_merged = False, save = True, plot = False):
     
         output_path, Ndataset = self.__get_outpath_path(Ndataset, use_merged)
 

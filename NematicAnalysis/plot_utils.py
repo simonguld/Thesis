@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from itertools import product
-
+import cv2
 
 plt.style.use('sg_article')
 
@@ -53,7 +53,8 @@ def frame_plotter(frame, plot_director = True,  ms = 4, engine = plt):
         mp.nematic.plot.defects(frame, ms = ms, engine = engine) 
     return
 
-def animate(oa, fn, rng=[], inter=500, boundaries=None, show=True, save = False, save_path = None):
+def animate(oa, fn, rng=[], inter=500, boundaries=None, dpi=320,
+            show=True, save = False, save_path = None):
     """Show a frame-by-frame animation.
 
     Parameters:
@@ -68,6 +69,9 @@ def animate(oa, fn, rng=[], inter=500, boundaries=None, show=True, save = False,
     # create the figure
     fig = plt.figure(figsize = (3.,3.))
 
+    if boundaries is None:
+        boundaries = [0, oa.LX]
+
     # the local animation function
     def animate_fn(i):
         # we want a fresh figure everytime
@@ -81,10 +85,10 @@ def animate(oa, fn, rng=[], inter=500, boundaries=None, show=True, save = False,
         fig.text(0.2, 1.02, '-1/2', fontsize=14, verticalalignment='bottom', color='blue', fontweight='bold')
         fig.text(0.8, 1.02, '+1/2',fontsize=14, verticalalignment='bottom', color='green', fontweight='bold');
         
-        if boundaries:
-            plt.ylim(boundaries[0],boundaries[1])
-            plt.xlim(boundaries[0],boundaries[1])
-    
+     
+        plt.ylim(boundaries[0],boundaries[1])
+        plt.xlim(boundaries[0],boundaries[1])
+
         xticks=range(boundaries[0] + 20, boundaries[1], 20)
         plt.xticks(xticks)
         plt.yticks(xticks)
@@ -102,7 +106,7 @@ def animate(oa, fn, rng=[], inter=500, boundaries=None, show=True, save = False,
         act = oa.zeta
         save_to = save_path if save_path else f'anim_L{LX}_zeta{act}.mp4'
         fps = 1000 / inter
-        anim.save(save_to, dpi=420, fps=fps)
+        anim.save(save_to, dpi=dpi, fps=fps)
 
     if show==True:
       plt.show()
@@ -301,11 +305,13 @@ def vorticity_abs(frame, engine=plt, vmin=None, vmax=None, abs=False):
     cax = divider.append_axes("right", size="5%", pad="2%")
     plt.colorbar(im, cax)
 
-def director(frame, engine=plt, scale=False, avg=4, ms = 1, alpha=1, lw=.5):
+def director(frame, Qxx=None, Qyx=None, engine=plt, scale=False, avg=4, ms = 1, alpha=1, lw=.5):
     """ Plot the director field """
     # get nematic field tensor
-    Qxx = frame.QQxx.reshape(frame.LX, frame.LY)
-    Qyx = frame.QQyx.reshape(frame.LX, frame.LY)
+    if Qxx is None:
+        Qxx = frame.QQxx.reshape(frame.LX, frame.LY)
+        Qyx = frame.QQyx.reshape(frame.LX, frame.LY)
+
     # get order S and director (nx, ny)
     S, nx, ny = mp.nematic.nematicPy.get_director(Qxx, Qyx)
     # plot using engine
@@ -318,7 +324,8 @@ def director(frame, engine=plt, scale=False, avg=4, ms = 1, alpha=1, lw=.5):
         y.append(j - f*ny[i,j]/2.)
         y.append(j + f*ny[i,j]/2.)
         y.append(None)
-    engine.plot(x, y, color='k', linestyle='-', markersize=1, linewidth=lw, alpha=alpha)
+    engine.plot(x, y, color='k', linestyle='-', markersize=ms, linewidth=lw, alpha=alpha)
+    return
 
 def order(frame, engine=plt, vmin=None):
     """ Plot the order """
@@ -334,3 +341,84 @@ def order(frame, engine=plt, vmin=None):
     divider = make_axes_locatable(engine)
     cax = divider.append_axes("right", size="5%", pad="2%")
     cbar = plt.colorbar(im, cax)
+    return
+
+def plot_defects(frame, defect_dict = None, defect_ms = 1,
+                director_dict = {'scale': False, 'avg': 4, 'ms':  1, 'alpha': 1, 'lw': .5}, 
+                dpi = 420, title = None, save_path = None):
+    LX = frame.LX
+    LY = frame.LY 
+    Qxx_dat = frame.QQxx.reshape(LX, LY)
+    Qyx_dat = frame.QQyx.reshape(LX, LY)
+
+    if defect_dict is None:
+        defect_dict = mp.nematic.nematicPy.get_defects(Qxx_dat, Qyx_dat, LX, LY)
+    
+    def_arr = get_defect_arr_from_frame(defect_dict)
+    charge_arr = np.array([defect_dict[i]['charge'] for i in np.arange(len(defect_dict))])
+    plus_mask = (charge_arr > 0)
+
+
+    fig, ax = plt.subplots(figsize=(6,6))     
+    director(frame, Qxx_dat, Qyx_dat, engine=ax, **director_dict)
+
+    if def_arr is not None:
+        ax.scatter(def_arr[plus_mask, 0], def_arr[plus_mask, 1], c='g', alpha=1,marker='^', s=defect_ms)
+        ax.scatter(def_arr[~plus_mask, 0], def_arr[~plus_mask, 1], c='b', alpha=1,marker='v', s=defect_ms)   
+    ax.set_aspect('equal')
+    ax.set(xlim=[0,LX], ylim=[0,LY]);
+    ax.xaxis.set_ticks_position('none') 
+    ax.yaxis.set_ticks_position('none')
+
+    fig.text(0.2, .94, '-1/2', fontsize=14, verticalalignment='bottom', color='blue', fontweight='bold');
+    fig.text(0.8, .94, '+1/2',fontsize=14, verticalalignment='bottom', color='green', fontweight='bold');
+    if title is not None: ax.set_title(title) 
+     
+    if save_path is None:
+        save_path = 'defects.png'
+
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=dpi)
+    plt.show()
+    plt.close(fig)
+    return
+
+def make_movie(image_folder, Nexp, act, output_folder=None, resize_factor = 1, fps = 10):
+    """
+    Make a movie from the images in image_folder
+    """
+  
+    output_folder = output_folder if output_folder is not None else image_folder
+    video_name = os.path.join(output_folder, f"zeta_{act}_counter_{Nexp}.mp4")
+
+    # Get all image files from the folder
+    images = [img for img in os.listdir(image_folder) if img.endswith(".png")]
+    images = sorted(images, key = lambda x: int(x.split('_')[-1].split('.')[0])) # Ensure images are in the correct order
+
+    if len(images) == 0:
+        print(f"No images found in {image_folder}. Exiting...")
+        return
+
+    # Read the first image to get the dimensions
+    frame = cv2.imread(os.path.join(image_folder, images[0]))
+    height, width, _ = frame.shape
+    width = int(width*resize_factor)
+    height = int(height*resize_factor)
+
+    # Define the video writer
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for mp4
+    video = cv2.VideoWriter(video_name, fourcc, fps=fps, framesize = (width, height))
+
+    # Loop through images and add them to the video
+    for image in images:
+        img_path = os.path.join(image_folder, image)
+        frame = cv2.imread(img_path)
+        if resize_factor != 1:
+            frame = cv2.resize(frame, (width, height))
+        video.write(frame)
+
+    # Release the video writer
+    video.release()
+    print(f"Video saved as {video_name}")
+    return
+
