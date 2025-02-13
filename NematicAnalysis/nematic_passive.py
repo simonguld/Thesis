@@ -234,7 +234,6 @@ def get_defect_density(defect_list, area, return_charges=False, save_path = None
                 np.savetxt(save_path, dens_defects)
             return dens_defects
 
-
 ### MAIN ---------------------------------------------------------------------------------------
 
 
@@ -243,26 +242,19 @@ def main():
     LX = 256
     mode = 'wet'
 
-    lambda_list = [0,] # 0.1, 0.5, 0.8]
+    lambda_list = [0, 1] # 0.1, 0.5, 0.8]
     
     extract = False
     find_conv = False
-    analyze= True
-    analyze_per_frame = True #if mode == 'dry' else False
+    analyze= False
+    analyze_per_frame = False #if mode == 'dry' else False
     plot_figs = True
     save_figs = True
 
-    if 0:
-        base_path_fwd = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\jayeeta\\{mode}\\na{LX}\\fwd'
-        base_path_bck = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\jayeeta\\{mode}\\na{LX}\\bck'
-        out_path = f'C:\\Users\\Simon Andersen\\Projects\\Projects\\Thesis\\NematicAnalysis\\data\\passive\\{mode}\\na{LX}'
-        fig_path = os.path.join(out_path, 'figs')
-
-
     for lambda_val in lambda_list:
-        base_path_fwd = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\jayeeta\\diff_lambda\\{mode}\\na{LX}\\{lambda_val}\\fwd'
-        base_path_bck = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\jayeeta\\diff_lambda\\{mode}\\na{LX}\\{lambda_val}\\bck'
-        out_path = f'C:\\Users\\Simon Andersen\\Projects\\Projects\\Thesis\\NematicAnalysis\\data\\passive\\diff_lambda\\{mode}\\na{LX}\\{lambda_val}'
+        base_path_fwd = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\jayeeta\\diff_lambda2\\{mode}\\na{LX}\\{lambda_val}\\fwd'
+        base_path_bck = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\jayeeta\\diff_lambda2\\{mode}\\na{LX}\\{lambda_val}\\bck'
+        out_path = f'C:\\Users\\Simon Andersen\\Projects\\Projects\\Thesis\\NematicAnalysis\\data\\passive\\diff_lambda2\\{mode}\\na{LX}\\{lambda_val}'
         fig_path = os.path.join(out_path, 'figs')
 
         if not os.path.isdir(fig_path):
@@ -286,7 +278,7 @@ def main():
         Nact_bck = len(act_bck)
 
         rmax_list = np.arange(10, LX / 2) if mode == 'wet' and LX==512 else np.arange(1, LX / 2,)
-        Nframes = 51
+        Nframes = 1000
         Nwindows = len(rmax_list)
         ninfo = 1000
 
@@ -329,7 +321,7 @@ def main():
             nrows = np.ceil(len(act_bck) / ncols).astype(int)
             fig, ax = plt.subplots(nrows=nrows,ncols=ncols, figsize=(12, 3*nrows))
             ax = ax.flatten()
-            conv_list_bck = np.zeros(Nact_bck)
+            conv_list_bck = np.zeros(Nact_bck) if not find_conv else conv_list_bck
 
             for i, act in enumerate(act_bck):
 
@@ -368,7 +360,7 @@ def main():
             nrows = np.ceil(len(act_fwd) / ncols).astype(int)
             fig, ax = plt.subplots(nrows=nrows,ncols=ncols, figsize=(12, 3*nrows))
             ax = ax.flatten()
-            conv_list_fwd = np.zeros(Nact_fwd)
+            conv_list_fwd = np.zeros(Nact_fwd) if not find_conv else conv_list_fwd
 
             for i, act in enumerate(act_fwd):
 

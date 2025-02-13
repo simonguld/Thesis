@@ -338,7 +338,7 @@ class AnalyseDefectsAll:
 
     def plot_sfac_per_activity(self, LX, Npoints_to_fit = 5, act_list = None, 
                                scaling_exp_list = [], scaling_label_list = [], 
-                               ax = None, plot_poisson = True):
+                               ax = None, plot_poisson = True, marker_list=[]):
 
         """
         returns fit_params_time_av
@@ -374,7 +374,8 @@ class AnalyseDefectsAll:
 
         for i, act in enumerate(act_list):
             act_idx = self.act_list[idx].index(act)
-            ax.errorbar(kbins, sfac_av[:, act_idx, 0], yerr = sfac_av[:, act_idx, 1], fmt = 's', \
+            ax.errorbar(kbins, sfac_av[:, act_idx, 0], yerr = sfac_av[:, act_idx, 1],\
+                         fmt = 's' if len(marker_list)==0  else marker_list[i], \
                     alpha = .6, color = colors[i], markersize = 5, label = rf'$\zeta =$ {act}')
             
             if len(scaling_exp_list) > 0:
