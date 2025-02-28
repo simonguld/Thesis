@@ -48,7 +48,6 @@ def get_defect_list(archive, LX, LY, idx_first_frame=0,):
         top_defects.append(defects)
     return top_defects
 
-
 def get_clustering(top_defect_list, method, method_kwargs, save = False, save_path = None):
     """
     
@@ -108,7 +107,57 @@ def get_defect_arr_from_frame(defect_dict, return_charge = False):
         defect_positions[i] = *defect['pos'], defect['charge'] if return_charge else defect['pos']
     return defect_positions
 
-def get_clustering_signed(top_defect_list, method, rmax_list, method_kwargs, save = False, save_path = None):
+def calc_distance_matrix(points, L=None, periodic=False):
+    """
+    Calculate the distance matrix between points in an N-dimensional space.
+
+    Parameters:
+    -----------
+    points : np.ndarray
+        Array of points in N-dimensional space. Shape (N, D) where N is the number of points and D is the dimensionality.
+    L : float
+        Length of the square domain in each dimension. If periodic is True, this is required.
+    periodic : bool
+        If True, use periodic boundary conditions.
+
+    Returns:
+    --------
+    distance_matrix : np.ndarray
+        Array of distances between points. Shape (N, N).
+    """ 
+
+    displacement = points[:, None] - points[None, :]
+    if periodic:
+        min_func_vectorized = lambda x: np.minimum(x, L - x)
+        dr = np.apply_along_axis(min_func_vectorized, axis = -1, arr = np.abs(displacement))
+    else:
+        dr = displacement
+    return np.sqrt(np.sum(dr**2, axis=-1))
+
+def calc_mean_nearest_neighbor_dist(distance_matrix,):
+    """
+    Calculate the mean nearest neighbor distance for each point in a set of points.
+
+    Parameters:
+    -----------
+    distance_matrix : np.ndarray
+        Array of distances between points. Shape (N, N).
+    
+    Returns:
+    --------
+    mean_nearest_neighbour_dist : float
+        Mean nearest neighbor distance.
+    std_nearest_neighbour_dist : float
+        Standard deviation of the mean nearest neighbor distance.
+    """
+
+    dist  = distance_matrix.astype('float64')
+    np.fill_diagonal(dist, np.inf)
+    nearest_neighbours_all = np.min(dist, axis = 1)
+    return np.mean(nearest_neighbours_all), np.std(nearest_neighbours_all) / np.sqrt(len(nearest_neighbours_all))
+
+def get_clustering_signed(top_defect_list, method, L, rmax_list, method_kwargs, periodic = False, \
+                          save = False, save_dir = None):
     """
     
     Parameters:
@@ -121,19 +170,24 @@ def get_clustering_signed(top_defect_list, method, rmax_list, method_kwargs, sav
     Nwindows = len(rmax_list)
 
     cl_arr = np.nan * np.ones([Nframes, Nwindows, 3])
+    nearest_neighbours_arr = np.nan * np.ones([Nframes, 2])
    
     for frame, defects in enumerate(top_defect_list):
         # Get defect array for frame
         defect_arr = get_defect_arr_from_frame(defects, return_charge = True)
+
+        if defect_arr is None:
+            continue
+
         defect_positions = defect_arr[:, :-1]
         defect_charges = defect_arr[:, -1] 
 
-        if defect_positions is None:
-            continue
+        distance_matrix = calc_distance_matrix(defect_positions, L = L, periodic = periodic)
+        nearest_neighbours_arr[frame] = calc_mean_nearest_neighbor_dist(distance_matrix)
 
         for i, rmax in enumerate(rmax_list):
-            cst = method(distance_threshold = rmax, **method_kwargs)
-            labels = cst.fit_predict(defect_positions)
+            cst = method(distance_threshold = rmax, **method_kwargs, metric='precomputed')
+            labels = cst.fit_predict(distance_matrix)
 
             Ncl = np.max(labels) + 1
             Qc_arr = np.zeros(Ncl)
@@ -152,9 +206,9 @@ def get_clustering_signed(top_defect_list, method, rmax_list, method_kwargs, sav
 
     if save:
         # save labels list
-        save_path = save_path if save_path is not None else 'cl_arr.npy'
-        np.save(save_path, cl_arr)
-    return cl_arr
+        np.save(os.path.join(save_dir, 'cl_arr.npy') if save_dir is not None else 'cl_arr.npy', cl_arr)
+        np.save(os.path.join(save_dir, 'nn_arr.npy') if save_dir is not None else 'nn_arr.npy', nearest_neighbours_arr)
+    return cl_arr, nearest_neighbours_arr
 
 def gen_status_txt(message = '', log_path = None):
     """
@@ -178,7 +232,7 @@ def main():
 
     input_folder = args.input_folder
     output_path = args.output_folder
-    save_path = os.path.join(output_path, f'cl_arr.npy')
+    save_path = output_path
     defect_list_folder = args.defect_list_folder
     
     if defect_list_folder is not None:
@@ -186,27 +240,26 @@ def main():
     else:
         defect_position_path = os.path.join(output_path, f'defect_positions.pkl')
 
-    exp = int(output_path.split('_')[-1])
-    act = float(output_path.split('_')[-3])
 
     # Load data archive
     ar = mp.archive.loadarchive(input_folder)
+    act = ar.__dict__['zeta']
     LX, LY = ar.__dict__['LX'], ar.__dict__['LY']
 
+    # Set clustering parameters
+    rmax_list = np.arange(1, LX / 2)
+    method_kwargs = dict(n_clusters=None, linkage = 'single',)
+    periodic = True
+
     t1 = time.perf_counter()
-    msg = f"\nAnalyzing experiment {exp} and activity {act}"
+    msg = f"\nAnalyzing data from input_folder: {input_folder}"
     print(msg)
 
     # Get defect list if provided
     if os.path.exists(defect_position_path):
         with open(defect_position_path, 'rb') as f:
             top_defects = pickle.load(f)
-    else:
-        if not act == ar.__dict__['zeta']:
-            err_msg = f"Activity list and zeta in archive do not match for experiment {exp}. Exiting..."
-            print(err_msg)
-            raise ValueError(err_msg)
-        
+    else:    
         # Get defect list
         top_defects = get_defect_list(ar, LX, LY,)
 
@@ -216,13 +269,12 @@ def main():
  
         print("Time to calculate defect positions: ", np.round(time.perf_counter()-t1,2), "s")
 
-    rmax_list = np.arange(10, 500)
-    method_kwargs = dict(n_clusters=None, linkage = 'single',)
-
+    
     t2 = time.perf_counter()
-    _ = get_clustering_signed(top_defects[:num_frames], AgglomerativeClustering, 
+    _, _ = get_clustering_signed(top_defects[:num_frames], AgglomerativeClustering, 
+                            L = LX, periodic = periodic,
                             rmax_list=rmax_list, method_kwargs=method_kwargs, 
-                            save = True, save_path=save_path)
+                            save = True, save_dir=save_path)
 
     msg = f"Time to do clustering/percolation: {np.round(time.perf_counter()-t2,2)} s"
     print(msg)
