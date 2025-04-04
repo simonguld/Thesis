@@ -990,7 +990,7 @@ def calc_weighted_mean(x, dx, axis = -1):
 
     return mean, np.sqrt(var)
 
-def calc_weighted_mean_vec(x, dx, replace_null_uncertainties = True):
+def calc_weighted_mean_vec(x, dx, omit_null_uncertainties = False, replace_null_uncertainties = True):
     """
     returns: weighted mean, error on mean,
     """
@@ -1001,9 +1001,17 @@ def calc_weighted_mean_vec(x, dx, replace_null_uncertainties = True):
     if not len(x) == len(dx):
         print('Length of x and dx must be equal')
         return
+    
+    if omit_null_uncertainties and replace_null_uncertainties:
+        replace_null_uncertainties = False
+        print('omit_null_uncertainties and replace_null_uncertainties cannot be True at the same time. Setting replace_null_uncertainties to False')
 
+    if omit_null_uncertainties:
+        mask = (dx > 0)
+        dx = dx[mask]
+        x = x[mask]
     if replace_null_uncertainties:
-          dx[dx == 0] = np.nanmean(dx[dx != 0])
+          dx[dx == 0] = np.nanstd(x)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
