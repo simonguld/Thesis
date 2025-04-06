@@ -1,6 +1,7 @@
 da.txt
 
-
+# folders
+NematicAnalysis/data/
 
 # file extensions
 *.npy
