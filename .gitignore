@@ -2,6 +2,13 @@ da.txt
 
 # folders
 NematicAnalysis/data/
+NematicAnalysis/test/
+NematicAnalysis/makito/data
+NematicAnalysis/makito/defect_data
+NematicAnalysis/makito/result*
+NematicAnalysis/figs
+NematicAnalysis/scrap
+LatticeMonteCarlo/output
 
 # file extensions
 *.npy
