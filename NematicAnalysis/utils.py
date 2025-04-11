@@ -18,6 +18,7 @@ from scipy import stats
 from sklearn.neighbors import KDTree
 from sklearn.cluster import AgglomerativeClustering
 from statsmodels.tsa.stattools import adfuller, acf
+from scipy.stats import binned_statistic
 
 import massPy as mp
 
@@ -835,6 +836,92 @@ def generate_points_uniform(Ndefect_arr, L, Ntrial, use_grid = False, save_path 
             pickle.dump(points_list_uniform, f)
 
     return points_list_uniform
+
+def calc_autocorr(nx, ny=None, shift=0, abs_val=False, normalize=False):
+
+    n = nx.shape[0]
+    if not n % 2 == 0:
+        raise ValueError("The length of the array must be even.")
+    
+    # initialize arrays
+    corr_arr = np.zeros((n, n))
+
+    for i in range(n):
+        for j in range(n):
+            if ny is not None:
+                dot_arr = nx * np.roll(np.roll(nx, i, axis=0), j, axis=1) + ny * np.roll(np.roll(ny, i, axis=0), j, axis=1)
+            else:
+                dot_arr = nx * np.roll(np.roll(nx, i, axis=0), j, axis=1)
+            if abs_val:
+                dot_arr = np.abs(dot_arr)
+            dot_arr -= shift
+            corr_arr[i, j] = dot_arr.sum()
+    
+    if normalize:
+        corr_arr /= corr_arr[0, 0]
+    return corr_arr
+
+def rdf2d_mod(Fx, Fy=None, corr_func = None, corr_func_kwargs = {}, \
+               origin=False, step=1.,):
+    """ Radial distribution function (2D) \n
+    Args:
+        F: two-dimensional array containing samples of a scalar function.
+        step: disctrization of radial displacement/seperation (default = 1.0).
+    Returns:
+        Radial distribution function and r-values.
+    """
+    if corr_func is None:
+        C = mp.base_modules.correlation.autocov(Fx) if Fy is None \
+            else mp.base_modules.correlation.autocov2(Fx, Fy)
+    else:
+        C = corr_func(Fx, Fy, **corr_func_kwargs)
+
+    C = np.divide(C, C[0,0], where=C[0,0]!=0)   # normalize
+    L = C.shape[0]  # linear system size
+    
+    r_max = L//2
+    r_bins = np.arange(0.5, r_max, step)        # list of bin edges
+    r_vals = .5 * (r_bins[1:] + r_bins[:-1])    # list of bin midpoints
+    
+    # two-dimensional array containing the radial distance 
+    # w.r.t the top left corner on a periodic square domain.
+    r = np.arange(0, L, 1)
+    r = np.minimum(r%L, -r%L)
+    r_nrm = np.abs(r[:,None] + 1J*r[None,:])
+    
+    # bin the autocovariance in radial-space.
+    rdf, _, _ = binned_statistic(r_nrm.flatten(), C.flatten(), 'mean', r_bins)
+    
+    if origin: # insert rdf(r=0) = 1.
+        rdf = np.insert(rdf, 0, 1.)
+        r_vals = np.insert(r_vals, 0, .0)
+    
+    return rdf, r_vals
+
+def get_radial_director_correlations(archive, corr_func = None, corr_func_kwargs = {}, \
+               origin=False, step=1.,):
+    
+    Nframes = archive.num_frames
+    L = archive.LX
+
+    r_max = L//2
+    r_bins = np.arange(0.5, r_max, step)        # list of bin edges
+    r_vals = .5 * (r_bins[1:] + r_bins[:-1])    # list of bin midpoints
+    rdf_arr = np.nan * np.zeros((Nframes, len(r_vals)))
+
+    for i in range(Nframes):
+
+        frame = archive._read_frame(i)
+        Qxx_dat = frame.QQxx.reshape(L, L)
+        Qyx_dat = frame.QQyx.reshape(L, L)
+        _, nx, ny = mp.nematic.nematicPy.get_director(Qxx_dat, Qyx_dat)
+
+        rdf, _ = rdf2d_mod(nx, ny, corr_func = corr_func, corr_func_kwargs = corr_func_kwargs, \
+                                 origin=origin, step=step)
+        rdf_arr[i] = rdf
+
+    return rdf_arr, r_vals
+
 
 ### Functions for statistical analysis ------------------------------------------------
 
