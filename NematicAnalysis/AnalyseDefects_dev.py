@@ -613,7 +613,8 @@ class AnalyseDefects:
                     np.savez(os.path.join(self.output_paths[N], 'pcf.npz'), pcf = pcf)
 
     def analyze_defects(self, Ndataset_list = None, temp_corr_simple = True, calc_pcf = False,
-                        acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.2},
+                        acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'nlags': None, 'alpha': 0.3174, 
+                                    'max_lag_threshold': 0, 'simple_threshold': 0.2, 'first_frame_idx': 0},
                         ddof = 1, sus_dict = {}, dens_fluc_dict = {}, sfac_dict = {}):
 
         Ndataset_list = range(self.Ndata) if Ndataset_list is None else Ndataset_list
