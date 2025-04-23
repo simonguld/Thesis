@@ -1,16 +1,16 @@
 from multiprocessing import Pool, cpu_count
-from .lempel_ziv_complexity import lz77
+from .lempel_ziv_complexity.main import lz77, lz78
 from math import log2
 import numpy as np
 
-def cid(sequence):
+def cid(sequence, version='python', implementation='lz77'):
     """ Computable Information Density \n
     Args: one-dimensional data array.
     Returns: CID measure of the sequence.
     """
-    C, L = lz77(sequence), len(sequence)
+    cid_func = lz77 if implementation == 'lz77' else lz78
+    C, L = cid_func(sequence, version), len(sequence)
     return C*(log2(C) + 2*log2(L/C)) / L
-
 
 def cid_shuffle(sequence, nshuff):
     """ Computable Information Density \n

@@ -8,7 +8,7 @@ NematicAnalysis/makito/defect_data
 NematicAnalysis/makito/result*
 NematicAnalysis/figs
 NematicAnalysis/scrap
-LatticeMonteCarlo/output
+Ising2D/output
 
 # file extensions
 *.npy
