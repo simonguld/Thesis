@@ -20,11 +20,14 @@ from sklearn.cluster import AgglomerativeClustering
 from statsmodels.tsa.stattools import adfuller, acf
 from scipy.stats import binned_statistic
 
+from structure_factor.point_pattern import PointPattern
+from structure_factor.hyperuniformity import bin_data
+from structure_factor.structure_factor import StructureFactor
+
 import massPy as mp
 
 sys.path.append('C:\\Users\\Simon Andersen\\Projects\\Projects\\Appstat2022\\External_Functions')
 from ExternalFunctions import Chi2Regression
-from ExternalFunctions import nice_string_output, add_text_to_ax  # Useful functions to print fit results on figure
 
 # Helper functions -------------------------------------------------------------------
 
@@ -310,16 +313,34 @@ def get_defect_list(archive, idx_first_frame=0, Nframes = None, verbose=False, a
 
     return top_defects
 
-def get_defect_arr_from_frame(defect_dict):
+def get_defect_arr_from_frame(defect_dict, return_charge = False):
     """
     Convert dictionary of defects to array of defect positions
+    Parameters:
+    -----------
+    defect_dict : dict
+        Dictionary of defects positions and charges
+    return_charge : bool
+        If True, return defect charges as well
+
+    Returns:
+    --------
+    defect_positions : np.ndarray
+        Array of defect positions
+    defect_charges : np.ndarray
     """
-    Ndefects = len(defect_dict)
-    if Ndefects == 0:
+
+    if len(defect_dict) == 0: 
         return None
-    defect_positions = np.empty([Ndefects, 2])
+
+    Ndefects = len(defect_dict)
+    defect_positions = np.empty([Ndefects, 3 if return_charge else 2])
+
+
     for i, defect in enumerate(defect_dict):
-        defect_positions[i] = defect['pos']
+        defect_positions[i,:2] = defect['pos']
+        if return_charge:
+            defect_positions[i,2] = defect['charge']
     return defect_positions
 
 def get_defect_density(defect_list, area, return_charges=False, save_path = None,):
@@ -922,6 +943,52 @@ def get_radial_director_correlations(archive, corr_func = None, corr_func_kwargs
 
     return rdf_arr, r_vals
 
+
+def get_structure_factor(top_defect_list, box_window, kmax = 1, nbins = 50,):
+    """
+    Calculate structure factor for the frames in frame_interval
+    """
+
+    # Get number of frames
+    Nframes = len(top_defect_list)
+
+    # Initialize structure factor
+    sf_arr_init = False
+
+    for i, defects in enumerate(top_defect_list):
+
+        # Get defect array for frame
+        defect_positions = get_defect_arr_from_frame(defects)
+
+        if defect_positions is None:
+            continue
+
+        # Initialize point pattern
+        point_pattern = PointPattern(defect_positions, box_window)
+
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            sf = StructureFactor(point_pattern)
+            k, sf_estimated = sf.scattering_intensity(k_max=kmax,)
+    
+        # Bin data
+        knorms = np.linalg.norm(k, axis=1)
+        kbins, smeans, sstds = bin_data(knorms, sf_estimated, bins=nbins,)
+
+        # Store results
+        if not sf_arr_init:
+            kbins_arr = kbins.astype('float')
+            sf_arr = np.zeros([Nframes, len(kbins_arr), 2]) * np.nan
+            sf_arr_init = True
+   
+        sf_arr[i, :, 0] = smeans
+        sf_arr[i, :, 1] = sstds
+
+    if sf_arr_init:
+        return kbins_arr, sf_arr
+    else:
+        return None, None
 
 ### Functions for statistical analysis ------------------------------------------------
 
