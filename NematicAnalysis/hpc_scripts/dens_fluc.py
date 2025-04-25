@@ -252,7 +252,16 @@ def get_windows(Nwindows, min_window_size, max_window_size, logspace = False):
         window_sizes = np.linspace(min_window_size, max_window_size, Nwindows)
     return window_sizes
 
-
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+    
 
 ### MAIN ---------------------------------------------------------------------------------------
 
@@ -263,7 +272,7 @@ def main():
     parser.add_argument('--input_folder', type=str)
     parser.add_argument('--output_folder', type=str)
     parser.add_argument('--defect_list_folder', type=str, default=None)
-    parser.add_argument('--periodic', type=bool, default=False) 
+    parser.add_argument('--periodic', type=str2bool, default=False) 
     parser.add_argument('--rmax_fraction', type=float, default=0.1)
     args = parser.parse_args()
 

@@ -31,7 +31,6 @@ development_mode = False
 num_frames = 5 if development_mode else None
 
 
-
 ### FUNCTIONS ----------------------------------------------------------------------------------
 
 

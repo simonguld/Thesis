@@ -692,12 +692,9 @@ class AnalyseDefects:
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
-
         Nbase = np.argmax(self.priorities)
         Nbase_frames = self.Nframes[Nbase]
         window_sizes = self.window_sizes[Nbase]
-        Nbins = len(self.window_sizes[Nbase])
-        Nrad = len(np.load(os.path.join(self.output_paths[Nbase], 'rad.npy')))
 
         # overwrite the activities with the ones from the other datasets according to self.priorities
         _, Nsorted = zip(*sorted(zip(reversed(self.priorities), range(self.Ndata))))
