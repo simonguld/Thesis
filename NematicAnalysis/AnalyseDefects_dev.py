@@ -25,6 +25,12 @@ from plot_utils import *
 # incorop in merge etc.
 # how to account for the fundamental problem of time series length dependence?
 
+# to mod according to self.ext_sfac and self.ext_pcf:
+
+# account for propagation in get_sfac, and also Nparams returned
+# track kbins and rad separately
+
+
 
 class AnalyseDefects:
     def __init__(self, input_list, output_path = 'data', count_suffix = ''):
@@ -54,6 +60,9 @@ class AnalyseDefects:
         self.act_dir_list = []
         self.window_sizes = []
         self.conv_list = []
+
+        self.ext_sfac = True
+        self.ext_pcf = True
         
         self.Ndata = len(input_list)
 
@@ -63,16 +72,24 @@ class AnalyseDefects:
                 try:     
                     act = np.loadtxt(os.path.join(self.output_paths[i], 'activity_list.txt'))
                     windows = np.loadtxt(os.path.join(self.output_paths[i], 'window_sizes.txt'))
-                    kbins = np.loadtxt(os.path.join(self.output_paths[i], 'kbins.txt'))
-                    rad = np.load(os.path.join(self.output_paths[i], 'rad.npy'))
                     self.Nactivity.append(len(act))
-                    if self.LX[i] == 2048 and i == 1:
-                        Nsubdir = 5
-                    else:
-                        Nsubdir = 10
+                    def_arr_path = os.path.join(self.output_paths[i], 'defect_arr.npz')
+                    Nsubdir = dict(np.load(def_arr_path, allow_pickle=True))['defect_arr'].shape[-1]       
                 except:
                     print(f'No input folder found for dataset {i}.')
                     continue
+                try:
+                    kbins = np.loadtxt(os.path.join(self.output_paths[i], 'kbins.txt'))
+                except:
+                    self.ext_sfac = False
+                    kbins = None
+                    print('kbins.txt not found. Assuming structure factor not extracted.')
+                try:
+                    rad = np.load(os.path.join(self.output_paths[i], 'rad.npy'))
+                except:
+                    self.ext_pcf = False
+                    rad = None
+                    print('rad.npy not found. Assuming pair correlation function not extracted.')
             else:
                 Nsubdir = 1
                 act = []
@@ -97,18 +114,27 @@ class AnalyseDefects:
                         windows = np.loadtxt(os.path.join(self.output_paths[i], 'window_sizes.txt'))
                     self.window_sizes.append(windows)
                         
-                    if not os.path.isfile(os.path.join(self.output_paths[i], 'kbins.txt')) or not os.path.isfile(os.path.join(self.output_paths[i], 'rad.npy')):
+                    if not os.path.isfile(os.path.join(self.output_paths[i], 'kbins.txt')):
                         subsubdir = os.path.join(subdir_full, os.listdir(subdir_full)[0])
                         dir_kbins = os.path.join(subsubdir, 'kbins.txt')
-                        dir_rad = os.path.join(subsubdir, 'rad.txt')
-
-                        # save the kbins and rad if they exist
                         if os.path.isfile(dir_kbins):
                             kbins = np.loadtxt(dir_kbins)
                             np.savetxt(os.path.join(self.output_paths[i], 'kbins.txt'), kbins)
+                        else:
+                            kbins = None
+                            self.ext_sfac = False
+                            print('kbins.txt not found. Assuming structure factor not extracted.')
+
+                    if not os.path.isfile(os.path.join(self.output_paths[i], 'rad.npy')):
+                        subsubdir = os.path.join(subdir_full, os.listdir(subdir_full)[0])
+                        dir_rad = os.path.join(subsubdir, 'rad.txt')   
                         if os.path.isfile(dir_rad):
                             rad = np.loadtxt(dir_rad)
                             np.save(os.path.join(self.output_paths[i], 'rad.npy'), rad)
+                        else:
+                            rad = None
+                            self.ext_pcf = False
+                            print('rad.npy not found. Assuming pair correlation function not extracted.')
         
                 act, act_dir = zip(*sorted(zip(act, act_dir)))
                 np.savetxt(os.path.join(self.output_paths[i], 'activity_list.txt'), act)
@@ -218,7 +244,7 @@ class AnalyseDefects:
 
         np.save(os.path.join(self.output_paths[N], 'sfac_time_av.npy'), sfac_time_av)
 
-        if calculate_pcf:
+        if calculate_pcf and self.ext_pcf:
             if not os.path.isfile(os.path.join(self.output_paths[N], 'pcf.npz')):
                 print('Structure factor not found. Extract results first.')
                 return
@@ -541,15 +567,14 @@ class AnalyseDefects:
             defect_arr = np.nan * np.zeros((self.Nframes[N], self.Nactivity[N], self.Nexp[N]))
             av_counts = np.nan * np.zeros([self.Nframes[N], len(self.window_sizes[N]), self.Nactivity[N], self.Nexp[N]])
   
-            if os.path.isfile(os.path.join(self.output_paths[N], 'kbins.txt')):
-                ext_sfac = True
+            if self.ext_sfac:
                 kbins = np.loadtxt(os.path.join(self.output_paths[N], 'kbins.txt'))
-                rad = np.load(os.path.join(self.output_paths[N], 'rad.npy'))
                 sfac = np.nan * np.zeros((self.Nframes[N], len(kbins), 2, self.Nactivity[N], min(10, self.Nexp[N])))
+            if self.ext_pcf:
+                rad = np.load(os.path.join(self.output_paths[N], 'rad.npy'))
                 pcf = np.nan * np.zeros((self.Nframes[N], len(rad), self.Nactivity[N], min(self.Nexp[N], 10)))
-            else:
-                ext_sfac = False
-            
+    
+
             print('Analyse defects for input folder {}'.format(self.input_paths[N]))
             for i, (act, act_dir) in enumerate(zip(self.act_list[N], self.act_dir_list[N])):
                 sfac_counter = 0
@@ -588,7 +613,8 @@ class AnalyseDefects:
                             raise ValueError(f'av_counts has the wrong shape: {counts.shape} Aborting ...')
                     else:
                         raise ValueError(f'av_counts has the wrong shape for exp {exp}: {counts.shape} Aborting ...')
-                    if ext_sfac and sfac_counter < 10:
+                    
+                    if self.ext_sfac and sfac_counter < 10:
                         try:
                             if os.path.isfile(os.path.join(exp_dir, 'sfac.npy')):
                                 sfac_temp = np.load(os.path.join(exp_dir, 'sfac.npy'))
@@ -597,19 +623,19 @@ class AnalyseDefects:
                             sfac[-idx_start:, :, :, i, sfac_counter] = sfac_temp[-idx_start:, :,:]
                         except:
                             pass
-                        try:
-                            pcf[-idx_start:, :, i, sfac_counter] = np.loadtxt(os.path.join(exp_dir, 'pcf.txt'.format(act,exp)))[-idx_start:,:]
-                        except:
-                            pass
+                        if self.ext_pcf:
+                            try:
+                                pcf[-idx_start:, :, i, sfac_counter] = np.loadtxt(os.path.join(exp_dir, 'pcf.txt'.format(act,exp)))[-idx_start:,:]
+                            except:
+                                pass
                         if os.path.isfile(os.path.join(exp_dir,'sfac_analysis_completed.txt')):
                             sfac_counter += 1 
-      
             if save:
                 np.savez(os.path.join(self.output_paths[N], 'defect_arr.npz'), defect_arr = defect_arr)
                 np.savez(os.path.join(self.output_paths[N], f'av_counts{self.count_suffix}.npz'), av_counts = av_counts)
-
-                if ext_sfac:
+                if self.ext_sfac:
                     np.savez(os.path.join(self.output_paths[N], 'sfac.npz'), sfac_full = sfac, sfac = sfac[:, :, 0, :, :], sfac_err = sfac[:, :, 1, :, :])
+                if self.ext_pcf:
                     np.savez(os.path.join(self.output_paths[N], 'pcf.npz'), pcf = pcf)
 
     def analyze_defects(self, Ndataset_list = None, temp_corr_simple = True, calc_pcf = False,
