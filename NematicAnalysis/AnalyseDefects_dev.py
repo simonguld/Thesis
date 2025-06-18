@@ -63,7 +63,10 @@ class AnalyseDefects:
         self.conv_list = []
 
         if os.path.isdir(self.output_merged):
-            self.act_list_merged = np.load(os.path.join(self.output_merged, 'activity_list.npy'))
+            try:
+                self.act_list_merged = np.load(os.path.join(self.output_merged, 'activity_list.npy'))
+            except:
+                self.act_list_merged = None
         else:
             self.act_list_merged = None
 
