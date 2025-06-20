@@ -101,10 +101,10 @@ class AnalyseDefects:
             else:
                 Nsubdir = 1
                 act = []
-                self.Nactivity.append(len(os.listdir(input)))
 
                 for _, subdir in enumerate(os.listdir(input)):
-            
+                    if not subdir.startswith('analysis'): continue
+                    
                     subdir_full = os.path.join(input, subdir)
                     act.append(np.round(float(subdir_full.split('_')[-1]),4))
                     act_dir.append(subdir_full)
@@ -147,6 +147,7 @@ class AnalyseDefects:
                             if verbose: print('rad.npy not found. Assuming pair correlation function not extracted.')
         
                 act, act_dir = zip(*sorted(zip(act, act_dir)))
+                self.Nactivity.append(len(act))
                 np.savetxt(os.path.join(self.output_paths[i], 'activity_list.txt'), act)
 
             self.act_list.append(act)

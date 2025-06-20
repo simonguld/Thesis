@@ -23,9 +23,11 @@ def main():
     # STEP 1: Initialize the analysis parameters and data paths
     ##### ---------------------------------------------------
 
-    data_suffix='lfric10bc' #'lambda_minus1'
+    data_suffix='lbc' #'lambda_minus1'
     LL = 512
     mode = 'all' # 'all' or 'short'
+
+    cluster_dir = 'lustre'
 
     extract = False
     do_basic_analysis, do_hyperuniformity_analysis, do_merge, do_plotting = False, False, False, True
@@ -58,7 +60,7 @@ def main():
         prefix_list = [] #['', 'l', '01']
         suffix_list = ['3', '4'] #'01',]# '10']
         Nframes_list = [400, 400] 
-        count_suffix = "_periodic_rm0.1"
+        count_suffix = "_rm0.1"
         label_list = ['Free-slip', 'Periodic', 'No-slip']
 
     output_path = f'data\\na{LL}{data_suffix}'
@@ -70,12 +72,22 @@ def main():
 
     if len(prefix_list) > 0:
         for i, prefix in enumerate(prefix_list):
-            data_dict = dict(path = f'X:\\na512exp\\na{LL}{prefix}{data_suffix}', \
+            if cluster_dir == 'groups':
+                path = f'X:\\na512exp\\na{LL}{prefix}{data_suffix}'
+            elif cluster_dir == 'lustre':
+                path = f'Z:\\nematic_analysis\\na512exploration\\na{LL}{prefix}{data_suffix}'
+            else:
+                raise ValueError("Unknown cluster directory. Choose 'groups' or 'lustre'.")
+            data_dict = dict(path = path, \
                         suffix = 's' if len(prefix) == 0 else prefix, priority = i, LX = LL, Nframes = Nframes_list[i])
             defect_list.append(data_dict)
     else:
         for i, suffix in enumerate(suffix_list):
-            data_dict = dict(path = f'X:\\na512exp\\na{LL}{data_suffix}{suffix}', \
+            if cluster_dir == 'groups':
+                path = f'X:\\na512exp\\na{LL}{data_suffix}{suffix}'
+            elif cluster_dir == 'lustre':
+                path = f'Z:\\nematic_analysis\\na512exploration\\na{LL}{data_suffix}{suffix}'
+            data_dict = dict(path = path, \
                         suffix = suffix, priority = 0, LX = LL, Nframes =  Nframes_list[i])
             defect_list.append(data_dict)
 
@@ -231,19 +243,24 @@ def main():
             
             for i, label in enumerate(label_list):
                 fit_params = np.load(fit_params_paths[i])
+
+              #  if label.startswith('No-'):
+               #     act_arr = np.array(act_list_list[i])
+                #    act_arr_mask = (act_arr != )
+
             #   print(len(act_list_list[i]), fit_params.shape)
                 ax3.errorbar(act_list_list[i], fit_params[:,0], yerr=fit_params[:,2], fmt = marker_list[i], label=label,
                             elinewidth=1.5, capsize=1.5, capthick=1, markersize = 5, alpha=.5)
 
             ax3.xaxis.set_minor_locator(ticker.MultipleLocator(2.5e-3))   
             ax3.yaxis.set_minor_locator(ticker.MultipleLocator(.1))     
-            ax3.set_xlim([.0178, 0.052])
+            ax3.set_xlim([.0182, 0.062])
             ax3.set_ylim(ymin=-.6, ymax=.3)
             ax3.set_xlabel(r'Activity ($\zeta$)')
             ax3.set_ylabel(r'Hyperuniformity exponent ($\gamma$)')
             ax3.vlines(x=0.022, ymin = -1.2, ymax=1.2, linestyle='--', color='k', lw = 1, alpha=.65, zorder=-10)
          #   ax3.vlines(x=0.022, ymin = -.16, ymax=1.2, linestyle='--', color='k', lw = 1)
-            ax3.hlines(y=0, xmin=0, xmax=0.052, linestyle='-', color='k', lw = 1 )
+            ax3.hlines(y=0, xmin=0, xmax=0.092, linestyle='-', color='k', lw = 1 )
 
             ax3.legend(loc='lower right', ncols=1)
             fig3.savefig(os.path.join(save_path, 'alpha.png'), dpi=420, bbox_inches='tight', pad_inches=0.1)
