@@ -212,6 +212,53 @@ def get_density_fluctuations(top_defect_list, window_sizes, side_length,  \
         np.save(save_path, count_arr)
     return count_arr
 
+def get_structure_factor(top_defect_list, box_window, kmax = 1, nbins = 50,):
+    """
+    Calculate structure factor for the frames in frame_interval
+    """
+
+    # Get number of frames
+    Nframes = len(top_defect_list)
+
+    # Initialize structure factor
+    sf_arr_init = False
+
+    for i, defects in enumerate(top_defect_list):
+
+        # Get defect array for frame
+        defect_positions = get_defect_arr_from_frame(defects)
+
+        if defect_positions is None:
+            continue
+
+        # Initialize point pattern
+        point_pattern = PointPattern(defect_positions, box_window)
+
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            sf = StructureFactor(point_pattern)
+            k, sf_estimated = sf.scattering_intensity(k_max=kmax,)
+    
+        # Bin data
+        knorms = np.linalg.norm(k, axis=1)
+        kbins, smeans, sstds = bin_data(knorms, sf_estimated, bins=nbins,)
+
+        # Store results
+        if not sf_arr_init:
+            kbins_arr = kbins.astype('float')
+            sf_arr = np.zeros([Nframes, len(kbins_arr), 2]) * np.nan
+            sf_arr_init = True
+   
+        sf_arr[i, :, 0] = smeans
+        sf_arr[i, :, 1] = sstds
+
+    if sf_arr_init:
+        return kbins_arr, sf_arr
+    else:
+        return None, None
+
+
 def est_stationarity(time_series, interval_len, Njump, Nconverged, max_sigma_dist = 2):
  
     # Estimate the stationarity of a time series by calculating the mean and standard deviation
