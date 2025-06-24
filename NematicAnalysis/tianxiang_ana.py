@@ -269,9 +269,6 @@ def get_pair_corr_from_defect_list(defect_list, ball_window, frame_idx_interval 
         # Initialize point pattern
         point_pattern = PointPattern(defect_positions, ball_window)
 
-        if i<10:
-            print("all good")
-
         # Calculate pair correlation function
         pcf_estimated = pcf.estimate(point_pattern, method=method, \
                                  Kest=kest_kwargs, fv=smoothing_kwargs)
@@ -335,8 +332,10 @@ def get_windows(Nwindows, min_window_size, max_window_size, logspace = False):
 
 def main():
 
-    extract_defects, calc_gnf, calc_sfac, calc_pcf = False, True, False, False
+    use_defect_boundaries = True # otherwise, use director boundaries
+    extract_defects, calc_gnf, calc_sfac, calc_pcf = False, False, False, True
 
+    frame_idx_interval = [100, 150]
 
     data_dirs = 'C:\\Users\\Simon Andersen\\OneDrive - University of Copenhagen\\PhD\\Active Nematic Defect Transition\\Tianxiang data\\data_new'
     save_path_params = os.path.join(data_dirs, f'parameters.pkl')
@@ -347,14 +346,13 @@ def main():
     params_dict = {}
 
     lattice_spacing = 40
-  #  Nx_grid_points, Ny_grid_points, Nframes = 94, 94, 150
 
     periodic = True
     gnf_dict = {'suffix': '_periodic' if periodic else '',
                 'Ncenter_points': 1,
-                'Nwindows': 100,
+                'Nwindows': 50,
                 'min_window_size_fraction': 0.01,
-                'max_window_size_fraction': .25,
+                'max_window_size_fraction': .125,
                 'logspace': False}
     
     data_names = ['frame1-50.csv', 'frame51-100.csv', 'frame101-150.csv']
@@ -393,6 +391,8 @@ def main():
 
             params_dict[key] = {'LX_bounds': [x_coords.min(), x_coords.max()],
                                 'LY_bounds': [y_coords.min(), y_coords.max()],
+                                'LX_bounds_defects': [0, nx * lattice_spacing],
+                                'LY_bounds_defects': [0, nx * lattice_spacing],
                                 'Nx_grid_points': nx,
                                 'Ny_grid_points': ny,
                                 'Nframes': nt}
@@ -418,8 +418,8 @@ def main():
             Xg, Yg = np.meshgrid(x_coords, y_coords)
 
             plus_defects  = []   # list of (n_i,2) arrays of X,Y
-            minus_defects = []
-            defect_list = []
+            #minus_defects = []
+            #defect_list = []
 
             ix = np.arange(nx)
             iy = np.arange(ny)
@@ -488,7 +488,14 @@ def main():
     director_x = np.load(save_path_fields, allow_pickle=True)['director_x']
     director_y = np.load(save_path_fields, allow_pickle=True)['director_y']
 
-    param_key = list(params_dict.keys())[0]
+    param_key = list(params_dict.keys())[-1]
+
+    if use_defect_boundaries:
+            x_bounds = params_dict[param_key]['LX_bounds_defects']
+            y_bounds = params_dict[param_key]['LY_bounds_defects']
+    else:
+        x_bounds, y_bounds = params_dict[param_key]['LX_bounds'], params_dict[param_key]['LY_bounds']   
+    LX, LY = x_bounds[1] - x_bounds[0], y_bounds[1] - y_bounds[0]
 
     if calc_gnf:
         # Define paths 
@@ -496,24 +503,14 @@ def main():
         counts_arr_path = os.path.join(data_dirs, f"av_counts{gnf_dict['suffix']}_rm{gnf_dict['max_window_size_fraction']}.npy")
         window_sizes_path = os.path.join(data_dirs, f'window_sizes.txt')
 
-   
-        Nx, Ny = params_dict[param_key]['Nx_grid_points'], params_dict[param_key]['Ny_grid_points']
-        LX_bounds, LY_bounds = params_dict[param_key]['LX_bounds'], params_dict[param_key]['LY_bounds']
-        LX, LY = LX_bounds[1] - LX_bounds[0], LY_bounds[1] - LY_bounds[0]
-      
-    
         window_sizes = get_windows(gnf_dict['Nwindows'], gnf_dict['min_window_size_fraction'] * LX, \
                                 gnf_dict['max_window_size_fraction'] * LX, gnf_dict['logspace'])
-        
         # save window sizes
         np.savetxt(window_sizes_path, window_sizes)
 
-        # Load data archive
-        t1 = perf_counter()
-
         # Get total no. of defects
+        t1 = perf_counter()
         _ = get_defect_density(defect_list_full, area = 1, save = True, save_path = av_defects_path)
-
 
         # Get density fluctuations
         _ = get_density_fluctuations(defect_list_full, window_sizes, lattice_space_scaling = lattice_spacing, \
@@ -525,15 +522,12 @@ def main():
         sfac_path = os.path.join(data_dirs, f'sfac.npy')
         kbins_path = os.path.join(data_dirs, f'kbins.txt')
 
-        LX_bounds, LY_bounds = params_dict[param_key]['LX_bounds'], params_dict[param_key]['LY_bounds']
-
         # Define sfac parameters
-        box_window = BoxWindow(bounds=[LX_bounds, LY_bounds])  
+        box_window = BoxWindow(bounds=[x_bounds, y_bounds])  
         kmax = 256 / LX
 
-        t2 = time.perf_counter()
-    
         # Get structure factor
+        t2 = time.perf_counter()
         kbins, sfac = get_structure_factor(defect_list_full, box_window, 
                                            lattice_space_scaling = lattice_spacing,
                                             kmax = kmax, nbins = 50,)
@@ -546,28 +540,31 @@ def main():
             # Save structure factor
             np.save(sfac_path, sfac)
             np.savetxt(kbins_path, kbins)
+
     if calc_pcf:
 
-        LX_bounds, LY_bounds = params_dict[param_key]['LX_bounds'], params_dict[param_key]['LY_bounds']
-        rmax = int((LX_bounds[-1] - LX_bounds[0])/4 - 1) 
-
+        # set parameters
+        rmax = int((x_bounds[-1] - x_bounds[0])/4 - 1) 
         nknots = int(rmax / (lattice_spacing / 2))
         method = 'fv'
         spar = 1.2
         smoothing_kwargs = dict(method="b", spar=spar, nknots=nknots)
         kest_kwargs = {'rmax': rmax, 'correction': 'good', 'nlarge': 3000, 'var.approx': False}
 
-        box_window = BoxWindow(bounds=[LX_bounds, LY_bounds])  
+        box_window = BoxWindow(bounds=[x_bounds, x_bounds])  
 
-        print([LX_bounds, LY_bounds], rmax)
+        print([x_bounds, y_bounds], rmax)
         print(box_window)
         print(kest_kwargs)
         print(smoothing_kwargs)
         print(method)
 
         t3 = time.perf_counter()
-        get_pair_corr_from_defect_list(defect_list_full, box_window, frame_idx_interval = None, method = method, \
-                        kest_kwargs = kest_kwargs, smoothing_kwargs = smoothing_kwargs, save=True, save_dir=data_dirs,)
+        get_pair_corr_from_defect_list(defect_list_full, box_window, \
+                                    frame_idx_interval = frame_idx_interval, \
+                                    method = method, lattice_space_scaling=lattice_spacing, \
+                                    kest_kwargs = kest_kwargs, smoothing_kwargs = smoothing_kwargs, \
+                                    save=True, save_dir=data_dirs,)
         
         print(f"Time to calculate pcf: ", np.round(time.perf_counter()-t3,2), "s")
     
