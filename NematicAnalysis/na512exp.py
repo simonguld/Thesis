@@ -23,7 +23,7 @@ def main():
     # STEP 1: Initialize the analysis parameters and data paths
     ##### ---------------------------------------------------
 
-    data_suffix='lfric10bc' #'lambda_minus1'
+    data_suffix='lbc' #  'lfric10bc' #'lambda_minus1'
     LL = 512
     mode = 'all' # 'all' or 'short'
 
@@ -39,9 +39,9 @@ def main():
         suffix_list = ['025', '10']
         Nframes_list = [400, 400] 
         count_suffix = "_periodic_rm0.1"
-        label_list = [r'$K = 0.025$', 
-                    r'$K = 0.05$',
-                    r'$K = 0.1$']
+        label_list = [r'$K_{ref} / 2 $', 
+                    r'$K_{ref} = 0.05$',
+                    r'$2 K_{ref}$']
     elif data_suffix == 'lbc':
         prefix_list = []
         suffix_list = ['3', '4']
@@ -200,7 +200,7 @@ def main():
                 ax.errorbar(act_list_list[i], av_def[:,0], av_def[:,1], fmt = marker_list[i], label=label,
                             elinewidth=1.5, capsize=1.5, capthick=1, markersize = 5, alpha=.5)
 
-            ax.set_xlabel(r'Activity ($\zeta$)')
+            ax.set_xlabel(r'Activity ($\tilde{\zeta}$)')
             ax.set_ylabel(r' Av. defect density ($\overline{\rho})$')
             ax.vlines(x=0.022, ymin = -1e-2, ymax=.6e-2, linestyle='--', color='k', lw = 1, alpha=.65, zorder=-10)
             ax.hlines(y=0, xmin=0, xmax=.052, linestyle='-', color='k', lw = 1 )
@@ -246,7 +246,7 @@ def main():
 
     
             ax2.set_ylim(ymin=0, ymax=13)
-            ax2.set_xlabel(r'Activity ($\zeta$)')
+            ax2.set_xlabel(r'Activity ($\tilde{\zeta}$)')
             ax2.set_ylabel(r'Active susceptibility ($\overline{\chi_a})$')
             ax2.vlines(x=0.022, ymin = -1.2, ymax=20, linestyle='--', color='k', lw = 1, alpha=.65, zorder=-10)
 
@@ -287,7 +287,7 @@ def main():
             ax3.set_xlim([act_min, act_max])
 
             ax3.set_ylim(ymin=-.6, ymax=.3)
-            ax3.set_xlabel(r'Activity ($\zeta$)')
+            ax3.set_xlabel(r'Activity ($\tilde{\zeta}$)')
             ax3.set_ylabel(r'Hyperuniformity exponent ($\gamma$)')
             ax3.vlines(x=0.022, ymin = -1.2, ymax=1.2, linestyle='--', color='k', lw = 1, alpha=.65, zorder=-10)
             ax3.hlines(y=0, xmin=0, xmax=0.092, linestyle='-', color='k', lw = 1 )
