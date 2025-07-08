@@ -23,7 +23,7 @@ def main():
     # STEP 1: Initialize the analysis parameters and data paths
     ##### ---------------------------------------------------
 
-    data_suffix='lbc' #  'lfric10bc' #'lambda_minus1'
+    data_suffix='lfric10bc' #'lk' #'lbc' #  'lfric10bc' #'lambda_minus1'
     LL = 512
     mode = 'all' # 'all' or 'short'
 
@@ -39,9 +39,9 @@ def main():
         suffix_list = ['025', '10']
         Nframes_list = [400, 400] 
         count_suffix = "_periodic_rm0.1"
-        label_list = [r'$K_{ref} / 2 $', 
-                    r'$K_{ref} = 0.05$',
-                    r'$2 K_{ref}$']
+        label_list = [r'$K_{\mathrm{ref}} / 2 $', 
+                    r'$K_{\mathrm{ref}} = 0.05$',
+                    r'$2 K_{\mathrm{ref}}$']
     elif data_suffix == 'lbc':
         prefix_list = []
         suffix_list = ['3', '4']
@@ -182,12 +182,14 @@ def main():
         use_sus_in_superfig = False
 
         if make_superfig: 
-            fig00, ax00 = plt.subplots(ncols=2, figsize=(10, 10/2.5))
+            width = 11
+            height = 4
+            fig00, ax00 = plt.subplots(ncols=2, figsize=(width, height))
             ax = ax00[0]
             ax3 = ax00[1]
 
         act_list_list = [ad.act_list[0], ad2.act_list_merged, ad.act_list[1]]
-        marker_list = ['ro', 'bs', 'gd']
+        marker_list = ['ro', 'gd', 'bs',] if data_suffix=='lfric10bc' else ['ro', 'bs', 'gd'] 
 
         ## plot av. defect density 
         if 'fig' in do_plotting_for or 'all' in do_plotting_for:
@@ -201,25 +203,38 @@ def main():
                             elinewidth=1.5, capsize=1.5, capthick=1, markersize = 5, alpha=.5)
 
             ax.set_xlabel(r'Activity ($\tilde{\zeta}$)')
-            ax.set_ylabel(r' Av. defect density ($\overline{\rho})$')
+            ax.set_ylabel(r' Av. defect density ($\overline{\rho_N})$')
             ax.vlines(x=0.022, ymin = -1e-2, ymax=.6e-2, linestyle='--', color='k', lw = 1, alpha=.65, zorder=-10)
             ax.hlines(y=0, xmin=0, xmax=.052, linestyle='-', color='k', lw = 1 )
 
+            ax.tick_params(axis='both',which='major', labelsize=14)
             ax.xaxis.set_minor_locator(ticker.MultipleLocator(2.5e-3))   
             ax.yaxis.set_minor_locator(ticker.MultipleLocator(.5e-3))  
 
             if data_suffix == 'lbc':
                 act_min, act_max = 0.0082, 0.052
+                xticks = [0.01, 0.02, 0.03, 0.04, 0.05]
+                order = [0, 1, 2]
             elif data_suffix == 'lk':
                 act_min, act_max = 0.0052, 0.052
+                xticks = [0.01, 0.02, 0.03, 0.04, 0.05]
+                order = [0, 1, 2]
             else:
                 act_min, act_max = 0.0178, 0.052
+                xticks = [0.02, 0.02, 0.03, 0.04, 0.05]
+                order = [0, 2,1]
+
+
+            handles, labels = ax.get_legend_handles_labels()
+            
+            ax.set_xticks(xticks, xticks)
             ax.set_xlim([act_min, act_max])
             ax.set_ylim(ymin=-.025e-2, ymax = .55e-2)
+            if data_suffix != 'lk':ax.legend([handles[i] for i in order], [labels[i] for i in order], loc='lower right', ncols=1)
             #ax.legend(loc='lower right', ncols=1)
             if not make_superfig: 
                 ax.legend(loc='lower right', ncols=1)
-                fig.savefig(os.path.join(save_path, f'av_density_{data_suffix}.png'), dpi=420, bbox_inches='tight')
+                fig.savefig(os.path.join(save_path, f'av_density_{data_suffix}.jpeg'), dpi=620, bbox_inches='tight')
 
 
         ## plot susceptibility
@@ -232,7 +247,8 @@ def main():
                 sus = sus_list[i]
                 ax2.errorbar(act_list_list[i], sus[:,0], sus[:,1], fmt = marker_list[i], label=label,
                             elinewidth=1.5, capsize=1.5, capthick=1, markersize = 5, alpha=.5)
-                
+            
+            ax2.tick_params(axis='both',which='major', labelsize=14)
             ax2.xaxis.set_minor_locator(ticker.MultipleLocator(2.5e-3))   
             ax2.yaxis.set_minor_locator(ticker.MultipleLocator(1))     
 
@@ -254,9 +270,9 @@ def main():
             
             if not make_superfig: 
                 ax2.legend(loc='upper right', ncols=1)
-                fig2.savefig(os.path.join(save_path, f'susceptibility_{data_suffix}.png'), dpi=420, bbox_inches='tight')
+                fig2.savefig(os.path.join(save_path, f'susceptibility_{data_suffix}.jpeg'), dpi=620, bbox_inches='tight')
             if use_sus_in_superfig:
-                fig00.savefig(os.path.join(save_path, f'av_density_susceptibility_{data_suffix}.png'), dpi=420, bbox_inches='tight', pad_inches=0.1)
+                fig00.savefig(os.path.join(save_path, f'av_density_susceptibility_{data_suffix}.jpeg'), dpi=620, bbox_inches='tight', pad_inches=0.1)
 
         ## plot hyperuniformity exponent across and for no-slip using 3 approaches
         if 'fig3' in do_plotting_for or 'all' in do_plotting_for:
@@ -273,34 +289,48 @@ def main():
                 
                 ax3.errorbar(act_list_list[i][act_idx_min:], fit_params[act_idx_min:,0], yerr=fit_params[act_idx_min:,2], \
                             fmt = marker_list[i], elinewidth=1.5, capsize=1.5, capthick=1, markersize = 5, \
-                            alpha=.5, label=None if make_superfig else label)
+                            alpha=.5, label=None if data_suffix=='lk' else label)
 
+            ax3.tick_params(axis='both',which='major', labelsize=14)
             ax3.xaxis.set_minor_locator(ticker.MultipleLocator(2.5e-3))   
             ax3.yaxis.set_minor_locator(ticker.MultipleLocator(.1))
 
             if data_suffix == 'lbc':
                 act_min, act_max = 0.0082, 0.052
+                ymin, ymax = -.58, .25
+                xticks = [0.01, 0.02, 0.03, 0.04, 0.05]
+                order = [0, 1, 2]
             elif data_suffix == 'lk':
                 act_min, act_max = 0.0052, 0.052
+                ymin, ymax = -.58, .3
+                xticks = [0.01, 0.02, 0.03, 0.04, 0.05]
+                order = [0, 1, 2]
             else:
                 act_min, act_max = 0.0178, 0.052
+                ymin, ymax = -.5, .25
+                xticks = [0.02, 0.03, 0.04, 0.05]
+                order = [0, 2, 1]
+            ax3.set_xticks(xticks, xticks)
             ax3.set_xlim([act_min, act_max])
+            ax3.set_ylim(ymin=ymin, ymax=ymax)
 
-            ax3.set_ylim(ymin=-.6, ymax=.3)
+            handles, labels = ax3.get_legend_handles_labels()
+       
             ax3.set_xlabel(r'Activity ($\tilde{\zeta}$)')
             ax3.set_ylabel(r'Hyperuniformity exponent ($\gamma$)')
             ax3.vlines(x=0.022, ymin = -1.2, ymax=1.2, linestyle='--', color='k', lw = 1, alpha=.65, zorder=-10)
             ax3.hlines(y=0, xmin=0, xmax=0.092, linestyle='-', color='k', lw = 1 )
+            if data_suffix != 'lk': ax3.legend([handles[i] for i in order], [labels[i] for i in order], loc='lower right', ncols=1)
 
             if not make_superfig:
                 ax3.legend(loc='lower right', ncols=1)
-                fig3.savefig(os.path.join(save_path, f'alpha_{data_suffix}.png'), dpi=420, bbox_inches='tight', pad_inches=0.1)
+                fig3.savefig(os.path.join(save_path, f'alpha_{data_suffix}.jpeg'), dpi=620, bbox_inches='tight', pad_inches=0.1)
         if make_superfig and not use_sus_in_superfig:
-            fig00.legend(ncol=3, fontsize = 16, bbox_to_anchor=(0.515, 1.04), loc='upper center')
-            fig00.savefig(os.path.join(save_path, f'av_density_alpha_{data_suffix}.png'), dpi=420, bbox_inches='tight', pad_inches=0.1)
-            fig00.savefig(os.path.join(save_path, f'av_density_alpha_{data_suffix}.eps'), bbox_inches='tight', pad_inches=0.1)
-            fig00.savefig(os.path.join(save_path0, f'av_density_alpha_{data_suffix}.png'), dpi=420, bbox_inches='tight', pad_inches=0.1)
-            fig00.savefig(os.path.join(save_path0, f'av_density_alpha_{data_suffix}.eps'), bbox_inches='tight', pad_inches=0.1)
+            if data_suffix =='lk': fig00.legend(ncol=3, fontsize = 16, bbox_to_anchor=(0.525, 1.04), loc='upper center')
+            fig00.savefig(os.path.join(save_path, f'av_density_alpha_{data_suffix}.jpeg'), dpi=620, bbox_inches='tight', pad_inches=0.1)
+            fig00.savefig(os.path.join(save_path, f'av_density_alpha_{data_suffix}.eps'), dpi=620)
+            fig00.savefig(os.path.join(save_path0, f'av_density_alpha_{data_suffix}.jpeg'), dpi=620, bbox_inches='tight', pad_inches=0.1)
+            fig00.savefig(os.path.join(save_path0, f'av_density_alpha_{data_suffix}.eps'), dpi=620)
 
         plt.close('all')
 
