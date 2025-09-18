@@ -31,6 +31,9 @@ from ExternalFunctions import Chi2Regression
 
 # Helper functions -------------------------------------------------------------------
 
+def sort_files(files, key = lambda x: int(x.split('frame')[-1].split('.')[0])):
+    return sorted(files, key=key)
+
 def gen_analysis_dict(LL, mode):
 
     dshort = dict(path = f'C:\\Users\\Simon Andersen\\Documents\\Uni\\Speciale\\Hyperuniformity\\na{LL}', \

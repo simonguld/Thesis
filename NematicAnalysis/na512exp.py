@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib import ticker
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 import os
+import pandas as pd
 
 from utils import *
 from plot_utils import *
@@ -23,7 +24,7 @@ def main():
     # STEP 1: Initialize the analysis parameters and data paths
     ##### ---------------------------------------------------
 
-    data_suffix='lfric10bc' #'lk' #'lbc' #  'lfric10bc' #'lambda_minus1'
+    data_suffix='lk' #'lfric10bc' #'lk' #'lbc' #  'lfric10bc' #'lambda_minus1'
     LL = 512
     mode = 'all' # 'all' or 'short'
 
@@ -325,14 +326,57 @@ def main():
             if not make_superfig:
                 ax3.legend(loc='lower right', ncols=1)
                 fig3.savefig(os.path.join(save_path, f'alpha_{data_suffix}.jpeg'), dpi=620, bbox_inches='tight', pad_inches=0.1)
-        if make_superfig and not use_sus_in_superfig:
-            if data_suffix =='lk': fig00.legend(ncol=3, fontsize = 16, bbox_to_anchor=(0.525, 1.04), loc='upper center')
-            fig00.savefig(os.path.join(save_path, f'av_density_alpha_{data_suffix}.jpeg'), dpi=620, bbox_inches='tight', pad_inches=0.1)
-            fig00.savefig(os.path.join(save_path, f'av_density_alpha_{data_suffix}.eps'), dpi=620)
-            fig00.savefig(os.path.join(save_path0, f'av_density_alpha_{data_suffix}.jpeg'), dpi=620, bbox_inches='tight', pad_inches=0.1)
-            fig00.savefig(os.path.join(save_path0, f'av_density_alpha_{data_suffix}.eps'), dpi=620)
-
+        if 0:
+            if make_superfig and not use_sus_in_superfig:
+                if data_suffix =='lk': fig00.legend(ncol=3, fontsize = 16, bbox_to_anchor=(0.525, 1.04), loc='upper center')
+                fig00.savefig(os.path.join(save_path, f'av_density_alpha_{data_suffix}.jpeg'), dpi=620, bbox_inches='tight', pad_inches=0.1)
+                fig00.savefig(os.path.join(save_path, f'av_density_alpha_{data_suffix}.eps'), dpi=620)
+                fig00.savefig(os.path.join(save_path0, f'av_density_alpha_{data_suffix}.jpeg'), dpi=620, bbox_inches='tight', pad_inches=0.1)
+                fig00.savefig(os.path.join(save_path0, f'av_density_alpha_{data_suffix}.eps'), dpi=620)
+        #plt.show()
         plt.close('all')
+
+        csv_outdir = "C:\\Users\\Simon Andersen\\OneDrive - University of Copenhagen\\PhD\\Active Nematic Defect Transition\\data\\supplementary_information"
+
+        if data_suffix == 'lfric10bc':
+            fig_name = "FigS5"
+            mu_val_list = ['Free-slip', 'Periodic', 'No-slip']
+            param_name = ''
+        elif data_suffix == 'lk':
+            fig_name = "FigS8"
+            mu_val_list = ['0.025', '0.05', '0.1']
+            param_name = 'K='
+        elif data_suffix == 'lbc':
+            fig_name = "FigS3"
+            mu_val_list = ['Free-slip', 'Periodic', 'No-slip']
+            param_name = ''
+
+  
+        # combine into loop
+        df = pd.DataFrame()
+        df2 = pd.DataFrame()
+        for i, act_list in enumerate(act_list_list):
+            temp_df = pd.DataFrame({'Activity': act_list, f'defect_density ({param_name}{mu_val_list[i]})': av_defect_list[i][:,0] / LL ** 2, \
+                            f'defect_dens_err ({param_name}{mu_val_list[i]})': av_defect_list[i][:,1] / LL ** 2})
+            df = pd.concat([df, temp_df], axis=0)
+
+            fit_params = np.load(fit_params_paths[i])
+        #   print(len(act_list_list[i]), fit_params.shape)
+            act_idx_min = 0
+            temp_df2 = pd.DataFrame({'Activity': act_list[act_idx_min:], f'exponent ({param_name}{mu_val_list[i]})': fit_params[act_idx_min:,0], \
+                            f'exponent_err ({param_name}{mu_val_list[i]})': fit_params[act_idx_min:,2]})
+            df2 = pd.concat([df2, temp_df2], axis=0)
+
+        df = df.groupby("Activity").first().reset_index()
+        # Sort by X
+        df = df.sort_values("Activity").reset_index(drop=True)
+        # print to csv
+        fig_name_suffix = '_left' #if i == 0 else '_center' if i == 1 else '_right'
+        df.to_csv(os.path.join(csv_outdir, fig_name + fig_name_suffix + '.csv'), index=False)
+
+        df2 = df2.groupby("Activity").first().reset_index()
+        df2 = df2.sort_values("Activity").reset_index(drop=True)
+        df2.to_csv(os.path.join(csv_outdir, fig_name + '_right' + '.csv'), index=False)
 
 
 
