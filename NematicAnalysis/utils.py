@@ -1351,6 +1351,27 @@ def estimate_effective_sample_size(acf_vals, acf_err_vals = None, confint_vals =
 
     return tau, tau_simple
 
+def calc_acf_for_arr_single(arr, conv_idx = 0, nlags = 0, alpha = 0.05, missing = 'conservative'):
+    """
+    arr shape must be (Nframes)
+    takes def arr and calculates the acf
+    nlags = 0: calculate all lags
+    """
+    Nframes = arr.shape[0]
+    conv_idx = int(conv_idx)
+    nlags = Nframes - conv_idx if nlags == 0 else min(Nframes - conv_idx, nlags)
+
+    acf_arr = np.nan * np.zeros(Nframes + 1)
+    confint_arr = np.nan * np.zeros((Nframes + 1, 2))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+
+        acf_res, confint = acf(arr[conv_idx:], nlags = nlags, alpha = alpha, missing=missing)
+        acf_arr[-(nlags + 1):] = acf_res
+        confint_arr[-(nlags + 1):, :] = confint
+    return acf_arr, confint_arr
+
 def calc_acf_for_arr(arr, conv_idx = 0, nlags = 0, alpha = 0.05, missing = 'conservative'):
     """
     arr shape must be (Nframes, Nexp) or (Nframes, Nsomething, Nexp)
@@ -1358,6 +1379,7 @@ def calc_acf_for_arr(arr, conv_idx = 0, nlags = 0, alpha = 0.05, missing = 'cons
     nlags = 0: calculate all lags
     """
     Nframes, Nexp = arr.shape[0], arr.shape[-1]
+    conv_idx = int(conv_idx)
     Nsomething = arr.shape[1] if len(arr.shape) == 3 else None
     nlags = Nframes - conv_idx if nlags == 0 else min(Nframes - conv_idx, nlags)
 
