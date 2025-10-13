@@ -1,5 +1,5 @@
 from multiprocessing import Pool, cpu_count
-from .lempel_ziv_complexity.main import lz77, lz78
+from lempel_ziv_complexity.main import lz77, lz78
 from math import log2
 import numpy as np
 
