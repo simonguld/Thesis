@@ -16,6 +16,7 @@ import logging
 #from functools import wraps, partial
 #from pathlib import Path
 #from multiprocessing import cpu_count
+from multiprocessing import cpu_count
 from multiprocessing.pool import Pool as Pool
 
 import numpy as np
@@ -23,16 +24,12 @@ import matplotlib.pyplot as plt
 
 
 sys.path.append('/groups/astro/kpr279/')
-#sys.path.append('/groups/astro/kpr279/ComputableInformationDensity')
+sys.path.append('/groups/astro/kpr279/ComputableInformationDensity/')
 import massPy as mp
+#import ComputableInformationDensity 
 
-
-from ComputableInformationDensity.cid import interlaced_time, cid2d
-from ComputableInformationDensity.computable_information_density import cid
-
-#sys.path.insert(0,'/groups/astro/robinboe/mass_analysis')
-#sys.path.insert(0,'/groups/astro/robinboe/mass_analysis/computable-information-density')
-#from joblib import Parallel, delayed
+from ComputableInformationDensity.cid import interlaced_time
+from ComputableInformationDensity.computable_information_density import cid, cid_linear, cid_shuffle
 
 development_mode = False
 if development_mode:
@@ -41,6 +38,42 @@ if development_mode:
 
 ### FUNCTIONS ----------------------------------------------------------------------------------
 
+
+def lz77_py(seq):
+    """ Lempel-Ziv 77 complexity \n
+    Note: The input sequence is cast as string 
+    and not tuple (for performance reasons).
+    """
+    seq = ''.join(map(str, seq))
+    complexity, ind, inc = 1, 1, 0
+    L = len(seq)
+    while ind + inc < L:
+        if seq[ind : ind + inc + 1] in seq[: ind + inc]:
+            inc += 1
+        else:
+            complexity += 1
+            ind += inc + 1
+            inc = 0
+    return complexity + 1 if inc != 0 else complexity
+
+def lz78_py(seq):
+    """ Lempel-Ziv 78 complexity \n
+    Note: The input sequence is cast as string 
+    and not tuple (for performance reasons).
+    """
+    seq = ''.join(map(str, seq))
+    sub_strings = set()
+    ind, inc = 0, 1
+    L = len(seq)
+    while ind + inc <= L:
+        sub_str = seq[ind : ind + inc]
+        if sub_str in sub_strings:
+            inc += 1
+        else:
+            sub_strings.add(sub_str)
+            ind += inc
+            inc = 1
+    return len(sub_strings)
 
 def get_defect_arr_from_frame(defect_dict):
     """
@@ -125,7 +158,6 @@ def get_defect_density(defect_list, area, return_charges=False, save = False, sa
                 np.savetxt(save_path, dens_defects)
             return dens_defects
 
-
 def get_allowed_time_intervals(system_size, nbits_max = 8):
     """
     Get allowed intervals for CID calculation based on system size and max bits.
@@ -149,7 +181,6 @@ def get_allowed_time_intervals(system_size, nbits_max = 8):
         allowed_intervals.append({'time_interval': int(2 ** interval_exp), 'nbits': nbits})
     return allowed_intervals
 
-
 def gen_status_txt(message = '', log_path = None):
     """
     Generate txt file with message and no.
@@ -170,7 +201,6 @@ def str2bool(v):
     
 
 ### MAIN ---------------------------------------------------------------------------------------
-
 
 
 def main():
@@ -195,6 +225,7 @@ def main():
     t1 = time.perf_counter()
     ar = mp.archive.loadarchive(archive_path)
     LX, LY = ar.__dict__['LX'], ar.__dict__['LY']
+    #Nframes = ar.__dict__['num_frames'] if not development_mode else num_frames
     exp = int(output_path.split('_')[-1])
     act = float(output_path.split('_')[-3])
 
@@ -212,13 +243,16 @@ def main():
         with open(os.path.join(output_path, 'defect_positions.pkl'), 'wb') as f:
             pickle.dump(top_defects, f)
         print(f"Time to calculate defect positions for experiment {exp} and activity {act}: ", np.round(time.perf_counter()-t1,2), "s")
-    t2 = time.perf_counter()
+
     # --------------------------------------------
     # Set params
 
-    compression_factor = 4
-    nshuffle = 4
-    nframes = 16 if not development_mode else num_frames
+    dtype = np.uint8
+    cid_mode = 'lz77'
+    verbose = True
+    compression_factor = 2
+    nshuffle = 8
+    nframes = 4 if not development_mode else num_frames
 
     observation_window_bounds = [(0, int(LX / compression_factor)), (0, int(LY / compression_factor))]
     lx_window = observation_window_bounds[0][1] - observation_window_bounds[0][0]
@@ -229,7 +263,7 @@ def main():
     if not lx_window == ly_window:
         raise ValueError("Observation window must be square.")
 
-    allowed_intervals_list = get_allowed_time_intervals(system_size = lx_window, nbits_max=8)
+    allowed_intervals_list = get_allowed_time_intervals(system_size = lx_window, nbits_max=12)
 
     # check that nframes is in allowed intervals
     if nframes not in [ai['time_interval'] for ai in allowed_intervals_list]:
@@ -238,48 +272,64 @@ def main():
         # get nbits for nframes
         nbits = [ai['nbits'] for ai in allowed_intervals_list if ai['time_interval'] == nframes][0]
 
-    print(f"Using nbits = {nbits} (size {1 << nbits}) for nframes = {nframes} and window size {lx_window}x{ly_window}")
+    param_dict = {
+        'compression_factor' : compression_factor,
+        'nshuffle' : nshuffle,
+        'nframes' : nframes,
+        'observation_window_bounds' : observation_window_bounds,
+        'lx_window' : lx_window,
+        'ly_window' : ly_window,
+        'nbits_frame' : nbits_frame,
+        'nbits' : nbits,
+        'cid_mode' : cid_mode,
+    }
+
+    with open(os.path.join(output_path, f'cid_params_{cid_mode}.pkl'), 'wb') as f:
+        pickle.dump(param_dict, f)
+
+    if verbose: print(f"Using nbits = {nbits} (size {1 << nbits}), nframes = {nframes}, nshuffle = {nshuffle}, window size {lx_window}x{ly_window}")
 
     # --------------------------------------------
     # Create defect grid and compute CID
 
-    defect_grid = np.zeros((nframes, lx_window, ly_window), dtype=int)
+    defect_grid = np.zeros((nframes, lx_window, ly_window), dtype=dtype)
     defect_count = []
 
     for i, defect in enumerate(top_defects[-nframes:]):
-        def_arr = get_defect_arr_from_frame(defect).astype(int)
-
+        def_arr = get_defect_arr_from_frame(defect) #.astype(int)
+        if def_arr is None:
+            defect_count.append(0)
+            continue
+        def_arr = def_arr.astype(dtype)
         def_arr_xmask = (observation_window_bounds[0][0] < def_arr[:,0]) & (def_arr[:,0] < observation_window_bounds[0][1])
-        def_arr_ymask = (observation_window_bounds[0][0] < def_arr[:,1]) & (def_arr[:,1] < observation_window_bounds[0][1])
+        def_arr_ymask = (observation_window_bounds[1][0] < def_arr[:,1]) & (def_arr[:,1] < observation_window_bounds[1][1])
         def_arr = def_arr[def_arr_xmask & def_arr_ymask]
 
         defect_grid[i, def_arr[:,0], def_arr[:,1]] = 1
         defect_count.append(defect_grid[i,:,:].sum())
 
-    print(f"Defect positions loaded and defect grid created. Time: ", np.round(time.perf_counter()-t2,2), "s")
+    if verbose: print(f"av defect counts in frames used for CID: {np.mean(defect_count):.2f}")  
+
     t3 = time.perf_counter()
+    CID = interlaced_time(nbits=nbits, nshuff=nshuffle,mode=cid_mode, verbose=verbose)
+    cid_av, cid_std, cid_shuff = CID(defect_grid)
 
-    # instantiate CID object:
-    CID = interlaced_time(nbits=nbits, nshuff=nshuffle)
-    cid_, cid_shuff = CID(defect_grid)
-
-    print(f"CID calculated. Time: ", np.round(time.perf_counter()-t3,2), "s")
+    if verbose: print(f"For act,exp {act,exp}: CID/CID_shuff: {(cid_av/cid_shuff[0]):.4f} Time: ", np.round(time.perf_counter()-t3,2), "s")
 
     res_cid = {
         'zeta' : ar.zeta,
         'density' : defect_count,
-        'cid' : cid_,
+        'cid' : (cid_av,cid_std),
         'cid_shuffle' : cid_shuff,
-        'lambda' : 1. - cid_/cid_shuff
+        'lambda' : 1. - cid_av/cid_shuff[0]
     }
 
-    with open(os.path.join(output_path, f'cid.pkl'), 'wb') as f:
+    with open(os.path.join(output_path, f'cid_{cid_mode}.pkl'), 'wb') as f:
         pickle.dump(res_cid, f)
 
-    gen_status_txt(msg, os.path.join(output_path, 'cid_analysis_completed.txt'))
+    #gen_status_txt(msg, os.path.join(output_path, 'cid_analysis_completed.txt'))
 
 
 if __name__ == '__main__':
     main()
-
 
