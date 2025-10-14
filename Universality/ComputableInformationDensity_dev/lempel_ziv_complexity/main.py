@@ -10,11 +10,11 @@ def lz77(sequence, version='C'):
     else:
         raise ValueError(f'Bad value for version: {version}.')
 
-def lz78(sequence, version='C'):
+def lz78(sequence, version='python'):
     seq = ''.join(map(str, sequence))
     if version == 'C':
         raise NotImplementedError("lz78 C-version")
     elif version == 'python':
-        lz78_py(seq)
+        return lz78_py(seq)
     else:
         raise ValueError(f'Bad value for version: {version}.')

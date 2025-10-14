@@ -1,13 +1,22 @@
+import os
+from multiprocessing import cpu_count
+
+import numpy as np
 from .cid_abc import ComputableInformationDensity
 
 class CID(ComputableInformationDensity):
     
     hamiltonian_cycle = [0, 1, 0, 2, 1, 0, 1, 2]
     length = len(hamiltonian_cycle)
+
+    slurm_cpus = os.getenv("SLURM_CPUS_PER_TASK")
+    ncpus = min(int(slurm_cpus) if slurm_cpus else cpu_count(), length)
     
-    def __init__(self, dim, nbits, nshuff):
-        super().__init__(dim, nbits, nshuff)
-    
+    def __init__(self, dim, nbits, nshuff, mode='lz77', verbose=False):
+        super().__init__(dim, nbits, nshuff, mode, verbose)
+        if verbose:
+            print(f"Using {self.ncpus} workers for CID calculations")
+
     def itter_hscan(self, data):
         """ yields all 8 distinct Hilbert scanned views of the data. 
         Since a view is returned, this operation is O(1). """
@@ -19,29 +28,30 @@ class CID(ComputableInformationDensity):
             yield self.hscan(data, hcurve)  # view of data, i.e. O(1)
     
     def __call__(self, data):
-        return super().__call__(data, n_workers=self.length)
+        cid_av, cid_std, cid_shuffle = super().__call__(data, n_workers=self.ncpus)
+        cid_sem = cid_std / np.sqrt(self.length)
+        return cid_av, cid_sem, cid_shuffle
 
-
-def cid2d(nbits, nshuff):
+def cid2d(nbits, nshuff, mode='lz77', verbose=False):
     """ Two-dimensional CID Analysis \n
     Args:
         order: linear system size (log2) (int).
         nshuff: number of radnom shuffles of data.
     Returns: instance of the CID class """
-    return CID(2, nbits, nshuff)
+    return CID(2, nbits, nshuff, mode, verbose)
 
-def sequential_time(nbits, nshuff):
+def sequential_time(nbits, nshuff, mode='lz77', verbose=False):
     """ Spatiotemporal CID Analysis \n
     Args:
         order: linear system size (log2) (int).
         nshuff: number of radnom shuffles of data.
     Returns: instance of the CID class """
-    return CID(2, nbits, nshuff)
+    return CID(2, nbits, nshuff, mode, verbose)
 
-def interlaced_time(nbits, nshuff):
+def interlaced_time(nbits, nshuff, mode='lz77', verbose=False):
     """ Spatiotemporal CID Analysis \n
     Args:
         order: linear system size (log2) (int).
         nshuff: number of radnom shuffles of data.
     Returns: instance of the CID class """
-    return CID(3, nbits, nshuff)
+    return CID(3, nbits, nshuff, mode, verbose)
