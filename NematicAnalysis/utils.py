@@ -1129,17 +1129,22 @@ def runstest(residuals):
 
     return test_statistic, p_val
 
-def calc_weighted_mean(x, dx, axis = -1):
+def calc_weighted_mean(x, dx, axis = -1, omit_null_uncertainties = False,):
     """
     returns: weighted mean, error on mean,
     """
     if not len(x) > 1:
         print('Length of x must be greater than 1')
         return
-    if not len(x) == len(dx):
+    if not x.shape == dx.shape:
         print('Length of x and dx must be equal')
         return
     
+    if omit_null_uncertainties:
+        mask = (dx == 0)
+        dx[mask] = np.nan
+        x[mask] = np.nan
+  
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
         var = 1 / np.nansum(1 / dx ** 2, axis = axis)
