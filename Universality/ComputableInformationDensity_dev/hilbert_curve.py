@@ -50,17 +50,17 @@ def hilbert_curve(n, p):
     return H
 
 def itter_hscan(data_arr, dim, nbits):
-        """ yields all 8 distinct Hilbert scanned views of the data. 
-        Since a view is returned, this operation is O(1). """
+    """ yields all 8 distinct Hilbert scanned views of the data. 
+    Since a view is returned, this operation is O(1). """
+    
+    data = np.transpose(data_arr).reshape((-1, ) + (1<<nbits, ) * dim).T
+    hamiltonian_cycle = [0, 1, 0, 2, 1, 0, 1, 2]
+    principal_curve = hilbert_curve(dim, nbits)
+    size = 1 << nbits  # 2**nbits
+    for k in hamiltonian_cycle:
+        hcurve = principal_curve  # view of principal_curve i.e. O(1)
         
-        data = np.transpose(data_arr).reshape((-1, ) + (1<<nbits, ) * dim).T
-        hamiltonian_cycle = [0, 1, 0, 2, 1, 0, 1, 2]
-        principal_curve = hilbert_curve(dim, nbits)
-        size = 1 << nbits  # 2**nbits
-        for k in hamiltonian_cycle:
-            hcurve = principal_curve  # view of principal_curve i.e. O(1)
-            
-            if k == 0: hcurve[0] = (size - 1) - hcurve[0]
-            if k == 1: hcurve[1] = (size - 1) - hcurve[1]
-            if k == 2: hcurve[[0,1]] = hcurve[[1,0]]
-            yield data[tuple( hcurve )].T.ravel()  # view of data, i.e. O(1)
+        if k == 0: hcurve[0] = (size - 1) - hcurve[0]
+        if k == 1: hcurve[1] = (size - 1) - hcurve[1]
+        if k == 2: hcurve[[0,1]] = hcurve[[1,0]]
+        yield data[tuple( hcurve )].T.ravel()  # view of data, i.e. O(1)

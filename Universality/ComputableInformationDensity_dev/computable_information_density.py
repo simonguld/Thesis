@@ -77,7 +77,9 @@ def cid_shuffle(sequence, nshuff, cid_mode='lz77', ddof = 1):
         pool.close()    # close the process pool
         pool.join()     # wait for all workers to complete
     cid_values = cid_pool.get()
-    return np.mean(cid_values), np.std(cid_values, ddof=ddof if nshuff > 1 else 0)
+    cid_av = np.mean(cid_values)
+    cid_sem = np.std(cid_values, ddof=ddof if nshuff > 2 else 0) / np.sqrt(nshuff)
+    return cid_av, cid_sem
 
 def cid_correlation(sequence):
     """ CID Correlation Length \n
