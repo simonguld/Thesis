@@ -1129,16 +1129,19 @@ def runstest(residuals):
 
     return test_statistic, p_val
 
-def calc_weighted_mean(x, dx, axis = -1, omit_null_uncertainties = False,):
+def calc_weighted_mean(X, dX, axis = -1, omit_null_uncertainties = False,):
     """
     returns: weighted mean, error on mean,
     """
-    if not len(x) > 1:
-        print('Length of x must be greater than 1')
+    if not len(X) > 1:
+        print('Length of X  must be greater than 1')
         return
-    if not x.shape == dx.shape:
-        print('Length of x and dx must be equal')
+    if not X.shape == dX.shape:
+        print('Length of X and dX must be equal')
         return
+    
+    x = X.astype('float')
+    dx = dX.astype('float')
     
     if omit_null_uncertainties:
         mask = (dx == 0)
@@ -1152,18 +1155,22 @@ def calc_weighted_mean(x, dx, axis = -1, omit_null_uncertainties = False,):
 
     return mean, np.sqrt(var)
 
-def calc_weighted_mean_vec(x, dx, omit_null_uncertainties = False, replace_null_uncertainties = True):
+def calc_weighted_mean_vec(X, dX, omit_null_uncertainties = False, replace_null_uncertainties = True):
     """
     returns: weighted mean, error on mean,
     """
-  
-    if not len(x) > 1:
-        print('Length of x must be greater than 1')
+    
+
+    if not len(X) > 1:
+        print('Length of X must be greater than 1')
         return
-    if not len(x) == len(dx):
-        print('Length of x and dx must be equal')
+    if not len(X) == len(dX):
+        print('Length of X and dX must be equal')
         return
     
+    x = X.astype('float')
+    dx = dX.astype('float')
+
     if omit_null_uncertainties and replace_null_uncertainties:
         replace_null_uncertainties = False
         print('omit_null_uncertainties and replace_null_uncertainties cannot be True at the same time. Setting replace_null_uncertainties to False')
