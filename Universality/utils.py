@@ -157,3 +157,21 @@ def block_flatten(array, m, k):
     reshaped = reshaped.transpose(0, 2, 1, 3)
     # Flatten all blocks
     return reshaped.reshape(-1)
+
+def calc_time_av_ind_samples(data_arr, conv_list, unc_multiplier = 1, ddof = 1,):
+    """
+    data_arr must have shape (Nframes, Nsomething, Nact, Nexp)
+    returns an array of shape (Nact, 2)
+    """
+
+    Nact = data_arr.shape[2]
+    time_av = np.nan * np.zeros((Nact, 2))
+    
+    for i in range(Nact):
+        ff_idx = conv_list[i]
+        Nsamples = np.sum(~np.isnan(data_arr[ff_idx:,:,i,:])) 
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            time_av[i, 0]  = np.nanmean(data_arr[ff_idx:, :, i, :], axis = (0, 1, -1))
+            time_av[i, 1] = np.nanstd(data_arr[ff_idx:, :, i, :], axis = (0, 1, -1), ddof = ddof) / np.sqrt(Nsamples / unc_multiplier)
+    return time_av
