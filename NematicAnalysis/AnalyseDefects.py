@@ -279,316 +279,6 @@ class AnalyseDefects:
             self.__calc_time_av(N, pcf, pcf_temp_corr, temp_corr_simple = temp_corr_simple, ddof = ddof, save_name = 'pcf_time_av',)  
         return
 
-    def est_corr_time(self, npz_dict, npz_target_name, npz_path, Ndataset = 0, use_error_bound = True,
-                    acf_dict = {'nlags_frac': 0.5, 'nlags': None, 'max_lag': None, \
-                                'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.15, \
-                                'first_frame_idx': None},
-                    save = True):  
-        """ npz_obj is the npz file containing the target array
-        target array must have shape (Nframes, Nact, Nexp) or (Nframes, Nsomething, Nact, Nexp)
-        """
-        
-        arr = npz_dict[npz_target_name]
-        act_list = self.act_list[Ndataset] 
-        conv_list = self.conv_list[Ndataset]
-
-        corr_time_arr = np.nan * np.zeros((2, *arr.shape[1:],)) 
-        Nsomething = arr.shape[1] if len(arr.shape) == 4 else None
-
-        max_lag = acf_dict['max_lag']
-        alpha = acf_dict['alpha']
-        max_lag_threshold = acf_dict['max_lag_threshold']
-        simple_threshold = acf_dict['simple_threshold']
-        first_frame_idx = acf_dict['first_frame_idx']
-
-        for j, act in enumerate(act_list):
-            act_idx = act_list.index(act) if type(act_list) is list else np.where(act_list == act)[0][0]
-
-            if first_frame_idx is None or first_frame_idx > arr.shape[0]:
-                conv_idx = conv_list[act_idx]
-            else: 
-                conv_idx = first_frame_idx
-
-            nf = arr.shape[0] - conv_idx
-            nlags= int(nf * acf_dict['nlags_frac']) if acf_dict['nlags'] is None else int(acf_dict['nlags'])
-            nlags = int(min(nf * acf_dict['nlags_frac'], nlags))
-
-            if nlags > nf:
-                continue
-        
-            arr_vals =  arr[:, :, act_idx, :] if Nsomething else arr[:, act_idx, :]
-            acf_arr, confint_arr = calc_acf_for_arr(arr_vals, conv_idx = conv_idx, nlags = nlags, alpha = alpha)
-
-            if Nsomething:
-                for k in range(arr.shape[-1]):
-                    for i in range(arr.shape[1]):
-                        acf_vals = acf_arr[-(nlags + 1):, i, k]
-                        confint_vals = confint_arr[-(nlags + 1):, :, i, k]
-
-                        tau, tau_simple = estimate_effective_sample_size(acf_vals,
-                                                                    confint_vals = confint_vals, 
-                                                                    max_lag = max_lag, 
-                                                                    max_lag_threshold = max_lag_threshold, 
-                                                                    simple_threshold = simple_threshold,
-                                                                    use_error_bound = use_error_bound)    
-                        corr_time_arr[:, i, j, k] = [tau, tau_simple,]
-            else:
-                for k in range(arr.shape[-1]):
-                    acf_vals = acf_arr[- (nlags + 1):,k]
-                    confint_vals = confint_arr[- (nlags + 1):,:,k]
-
-                    tau, tau_simple = estimate_effective_sample_size(acf_vals,
-                                                                confint_vals = confint_vals, 
-                                                                max_lag = max_lag, 
-                                                                max_lag_threshold = max_lag_threshold, 
-                                                                simple_threshold = simple_threshold,
-                                                                use_error_bound = use_error_bound)   
-                    corr_time_arr[:, j, k] = [tau, tau_simple,]
-        if save:
-            npz_dict['corr_time_arr'] = corr_time_arr 
-            np.savez(npz_path, **npz_dict)
-        return corr_time_arr
-
-    def calc_corr_time_old(self, Ndataset = 0, use_error_bound=False,
-                         acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.15},
-                         save = True):  
-
-        def_arr = self.get_arrays_full(Ndataset = Ndataset)[0]
-        act_list = self.act_list[Ndataset]
-   
-        corr_time_arr = np.zeros((2, def_arr.shape[-2], def_arr.shape[-1],)) 
-  
-        max_lag = acf_dict['max_lag']
-        alpha = acf_dict['alpha']
-        max_lag_threshold = acf_dict['max_lag_threshold']
-        simple_threshold = acf_dict['simple_threshold']
-
-        for j, act in enumerate(self.act_list[Ndataset]):
-            act_idx = act_list.index(act)
-
-            conv_idx = self.conv_list[Ndataset][act_idx]
-            nf = def_arr.shape[0] - conv_idx
-            nlags= int(nf * acf_dict['nlags_frac'])  
-      
-            acf_arr, confint_arr = calc_acf_for_arr(def_arr[:, act_idx, :], conv_idx = conv_idx, nlags = nlags, alpha = alpha)
-    
-            for k in range(self.Nexp[Ndataset]):
-
-                acf_vals = acf_arr[- (nlags + 1):,k]
-                confint_vals = confint_arr[- (nlags + 1):,:,k]
-
-                tau, tau_simple = estimate_effective_sample_size(acf_vals,
-                                                            confint_vals = confint_vals, 
-                                                            max_lag = max_lag, 
-                                                            max_lag_threshold=max_lag_threshold, 
-                                                            simple_threshold=simple_threshold,
-                                                            use_error_bound=use_error_bound)     
-                corr_time_arr[:, j, k] = [tau, tau_simple]
-        if save:
-            np.save(os.path.join(self.output_paths[Ndataset], 'corr_time.npy'), corr_time_arr)
-        return corr_time_arr
-
-    def calc_susceptibility(self, Ndataset = 0, Nframes = None, 
-                            order_param_func = None, Nscale = True, \
-                            save = True):
-
-        act_list = self.act_list[Ndataset]
-        conv_list = self.conv_list[Ndataset]
-        output_path = self.output_paths[Ndataset]
-        Nact = len(act_list)
-
-        av_def = self.get_arrays_av(Ndataset = Ndataset)[-1]
-        def_arr = self.get_arrays_full(Ndataset = Ndataset)[0]
-
-        if order_param_func is None:
-            order_param = def_arr
-        else:
-            order_param = order_param_func(def_arr, av_def, self.LX[Ndataset])
-        
-        # Initialize arrays
-        sus = np.zeros((Nact, 2)) * np.nan
-
-        for i, act in enumerate(act_list):
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=RuntimeWarning)
-                Nfirst_frame = conv_list[i] if Nframes is None else max(def_arr.shape[0] - Nframes, conv_list[i])
-                sus[i,0] = np.nanmean(order_param[Nfirst_frame:, i, :] ** 2,) - np.nanmean(order_param[Nfirst_frame:, i, :]) ** 2
-        if Nscale:
-            sus /= av_def[:, 0][:, None]
-            sus[:,1] = np.sqrt(sus[:,0]/av_def[:,0]) * av_def[:,1]
-        if save:
-            np.save(os.path.join(output_path, 'susceptibility.npy'), sus)
-        return sus
-    
-    def print_params(self, Ndataset = 0, act = [], param_keys = ['nstart', 'nsteps']):
-        """
-        Print out the simulation parameters for the given dataset.
-        If act is [], simulation parameters for all activities will be output.
-        """
-
-        # change pathlib to WindowsPath to avoid error
-        temp = pathlib.PosixPath
-        pathlib.PosixPath = pathlib.WindowsPath
-
-        act_path = self.act_dir_list[Ndataset]
-        act_list = self.act_list[Ndataset] if len(act) == 0 else act
-
-        for activity in act_list:
-            # load pkl dictionary
-            act_idx = self.act_list[Ndataset].index(activity)
-            if activity in [0.02, 0.03, 0.2]:
-                activity = str(activity) + '0'
-            base_path = os.path.join(act_path[act_idx], f'zeta_{activity}_counter')
-
-            if os.path.isdir(base_path + '_0'):
-                dict_path = base_path + '_0'
-            elif os.path.isdir(base_path + '_10'):
-                dict_path = base_path + '_10'
-            elif os.path.isdir(base_path + '_20'):
-                dict_path = base_path + '_20'
-            else:
-                print(f"Parameter dictionary was not found for activity {activity}")
-                continue
-
-            dict_path = os.path.join(dict_path, 'model_params.pkl')
-   
-            with open(dict_path, 'rb') as f:
-                param_dict = pkl.load(f)
-
-            print(f"\nFor activity = {activity}:")
-            for key in param_keys:
-                try:
-                    print(f"{key}: {param_dict[key]}")
-                except:
-                    print(f"{key} not found in parameter dictionary.")
-        # reset pathlib
-        pathlib.PosixPath = temp
-        return
-
-    def update_conv_list(self, Ndataset_list = None):
-        if Ndataset_list is None:
-            Ndataset_list = range(self.Ndata)
-        
-        for i in Ndataset_list:
-            fig, ax = self.plot_defects_per_activity(Ndataset = i, plot_density = False)
-            plt.show()
-            for j in range(self.Nactivity[i]):
-                self.conv_list[i][j] = int(input(f'Enter the first frame to use for activity {self.act_list[i][j]}: '))
-
-            # save the convergence list
-            np.savetxt(os.path.join(self.output_paths[i], 'conv_list.txt'), self.conv_list[i])
-        return
-
-    def get_arrays_full(self, Ndataset = 0,):
-        """
-        returns defect_arr, av_counts
-        """
-        output_path = self.output_paths[Ndataset]
-        try:
-            defect_arr = np.load(os.path.join(output_path, 'defect_arr.npz'), allow_pickle = True)['defect_arr']  
-            av_counts = np.load(os.path.join(output_path, f'av_counts{self.count_suffix}.npz'), allow_pickle = True)['av_counts']
-        except:
-            print('Arrays not found. Analyse defects first.')
-            return
-        return defect_arr, av_counts
-      
-    def get_arrays_av(self, Ndataset = 0, use_merged = False):
-        """  
-        returns defect_arr_av, var_counts_av, av_counts_av, av_defects
-        """
-
-        output_path, Ndataset = self.__get_outpath_path(Ndataset, use_merged)
-
-        try:
-            defect_arr_av = np.load(os.path.join(output_path, 'defect_arr_av.npy'))
-            var_counts_av = np.load(os.path.join(output_path, f'var_counts_av{self.count_suffix}.npy'))
-            av_counts_av = np.load(os.path.join(output_path, f'av_counts_av{self.count_suffix}.npy'))
-            av_defects = np.load(os.path.join(output_path, 'av_defects.npy'))
-        except:
-            print('Arrays not found. Analyse defects first.')
-            return
-        
-        return defect_arr_av, var_counts_av, av_counts_av, av_defects
-   
-    def get_susceptibility(self, Ndataset = 0, use_merged = False):
-        """
-        returns susceptibility
-        """
-        if use_merged:
-            output_path = os.path.join(self.output_main_path, 'merged_results')
-
-            if not os.path.isdir(output_path):
-                print(f'Merged results not found. Run merge_results first.')
-                return
-        else:
-            output_path = self.output_paths[Ndataset]
-        try:
-            susceptibility = np.load(os.path.join(output_path, 'susceptibility.npy'))
-        except:
-            print('Susceptibilitites not found. Analyse defects first.')
-            return
-        return susceptibility
-
-    def get_sfac_pcf(self, Ndataset = 0, time_av = True, use_merged = False):
-        """
-        returns kbins, sfac_av, rad, pcf_av
-        """
-        
-        prefix = 'time_' if time_av else ''
-        
-        if use_merged:
-            output_path = os.path.join(self.output_main_path, 'merged_results')
-
-            if not os.path.isdir(output_path):
-                print(f'Merged results not found. Run merge_results first.')
-                return
-        else:
-            output_path = self.output_paths[Ndataset]
-        try:
-            sfac_av = np.load(os.path.join(output_path, f'sfac_{prefix}av.npy'))
-            kbins = np.loadtxt(os.path.join(output_path, 'kbins.txt'))      
-        except:
-            print('Structure factor or pcf not found. Analyse defects first.')
-            return
-        if self.ext_pcf:
-            try:
-                rad = np.load(os.path.join(output_path, 'rad.npy'))
-                pcf_av = np.load(os.path.join(output_path, f'pcf_{prefix}av.npy'))
-            except:
-                rad = None
-                pcf_av = None
-                print('Pair correlation function not found. Assuming not extracted.')
-        else:
-            rad = None
-            pcf_av = None      
-        return kbins, sfac_av, rad, pcf_av
-
-    def get_sfac_pcf_full(self, Ndataset = 0,):
-        """
-        returns kbins, sfac, rad, pcf
-        """
-      
-        output_path = self.output_paths[Ndataset]
-
-        try:
-            sfac = np.load(os.path.join(output_path, f'sfac.npz'), allow_pickle = True)['sfac']
-            kbins = np.loadtxt(os.path.join(output_path, 'kbins.txt'))      
-        except:
-            print('Structure factor not found. Analyse defects first.')
-            return
-        if self.ext_pcf:
-            try:
-                rad = np.load(os.path.join(output_path, 'rad.npy'))
-                pcf = np.load(os.path.join(output_path, 'pcf.npz'), allow_pickle = True)['pcf']
-            except:
-                rad = None
-                pcf = None
-                print('Pair correlation function not found. Assuming not extracted.')
-        else:
-            rad = None
-            pcf = None
-        return kbins, sfac, rad, pcf
-    
     def extract_results(self, save = True,):
         """
         Analyse the defects for all the input folders
@@ -597,14 +287,14 @@ class AnalyseDefects:
 
             defect_arr = np.nan * np.zeros((self.Nframes[N], self.Nactivity[N], self.Nexp[N]))
             av_counts = np.nan * np.zeros([self.Nframes[N], len(self.window_sizes[N]), self.Nactivity[N], self.Nexp[N]])
-  
+
             if self.ext_sfac:
                 kbins = np.loadtxt(os.path.join(self.output_paths[N], 'kbins.txt'))
                 sfac = np.nan * np.zeros((self.Nframes[N], len(kbins), 2, self.Nactivity[N], min(10, self.Nexp[N])))
             if self.ext_pcf:
                 rad = np.load(os.path.join(self.output_paths[N], 'rad.npy'))
                 pcf = np.nan * np.zeros((self.Nframes[N], len(rad), self.Nactivity[N], min(self.Nexp[N], 10)))
-    
+
 
             print('Analyse defects for input folder {}'.format(self.input_paths[N]))
             for i, (act, act_dir) in enumerate(zip(self.act_list[N], self.act_dir_list[N])):
@@ -668,6 +358,7 @@ class AnalyseDefects:
                     np.savez(os.path.join(self.output_paths[N], 'sfac.npz'), sfac_full = sfac, sfac = sfac[:, :, 0, :, :], sfac_err = sfac[:, :, 1, :, :])
                 if self.ext_pcf:
                     np.savez(os.path.join(self.output_paths[N], 'pcf.npz'), pcf = pcf)
+        return
 
     def analyze_defects(self, Ndataset_list = None, temp_corr_simple = True, calc_pcf = False,
                         acf_dict = {'nlags_frac': 0.5, 'max_lag': None, 'nlags': None, 'alpha': 0.3174, 
@@ -834,33 +525,276 @@ class AnalyseDefects:
         self.act_list_merged = act_list_full
         return
 
-    def merge_sus(self, save_path = None, save = True):
+    def est_corr_time(self, npz_dict, npz_target_name, npz_path, Ndataset = 0, use_error_bound = True,
+                    acf_dict = {'nlags_frac': 0.5, 'nlags': None, 'max_lag': None, \
+                                'alpha': 0.3174, 'max_lag_threshold': 0, 'simple_threshold': 0.15, \
+                                'first_frame_idx': None},
+                    save = True):  
+        """ npz_obj is the npz file containing the target array
+        target array must have shape (Nframes, Nact, Nexp) or (Nframes, Nsomething, Nact, Nexp)
+        """
+        
+        arr = npz_dict[npz_target_name]
+        act_list = self.act_list[Ndataset] 
+        conv_list = self.conv_list[Ndataset]
 
-        if save_path is None:
-            save_path = os.path.join(self.output_main_path, 'merged_results')
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
+        corr_time_arr = np.nan * np.zeros((2, *arr.shape[1:],)) 
+        Nsomething = arr.shape[1] if len(arr.shape) == 4 else None
 
-        Nbase = np.argmin(self.priorities)
+        max_lag = acf_dict['max_lag']
+        alpha = acf_dict['alpha']
+        max_lag_threshold = acf_dict['max_lag_threshold']
+        simple_threshold = acf_dict['simple_threshold']
+        first_frame_idx = acf_dict['first_frame_idx']
+
+        for j, act in enumerate(act_list):
+            act_idx = act_list.index(act) if type(act_list) is list else np.where(act_list == act)[0][0]
+
+            if first_frame_idx is None or first_frame_idx > arr.shape[0]:
+                conv_idx = conv_list[act_idx]
+            else: 
+                conv_idx = first_frame_idx
+
+            nf = arr.shape[0] - conv_idx
+            nlags= int(nf * acf_dict['nlags_frac']) if acf_dict['nlags'] is None else int(acf_dict['nlags'])
+            nlags = int(min(nf * acf_dict['nlags_frac'], nlags))
+
+            if nlags > nf:
+                continue
+        
+            arr_vals =  arr[:, :, act_idx, :] if Nsomething else arr[:, act_idx, :]
+            acf_arr, confint_arr = calc_acf_for_arr(arr_vals, conv_idx = conv_idx, nlags = nlags, alpha = alpha)
+
+            if Nsomething:
+                for k in range(arr.shape[-1]):
+                    for i in range(arr.shape[1]):
+                        acf_vals = acf_arr[-(nlags + 1):, i, k]
+                        confint_vals = confint_arr[-(nlags + 1):, :, i, k]
+
+                        tau, tau_simple = estimate_effective_sample_size(acf_vals,
+                                                                    confint_vals = confint_vals, 
+                                                                    max_lag = max_lag, 
+                                                                    max_lag_threshold = max_lag_threshold, 
+                                                                    simple_threshold = simple_threshold,
+                                                                    use_error_bound = use_error_bound)    
+                        corr_time_arr[:, i, j, k] = [tau, tau_simple,]
+            else:
+                for k in range(arr.shape[-1]):
+                    acf_vals = acf_arr[- (nlags + 1):,k]
+                    confint_vals = confint_arr[- (nlags + 1):,:,k]
+
+                    tau, tau_simple = estimate_effective_sample_size(acf_vals,
+                                                                confint_vals = confint_vals, 
+                                                                max_lag = max_lag, 
+                                                                max_lag_threshold = max_lag_threshold, 
+                                                                simple_threshold = simple_threshold,
+                                                                use_error_bound = use_error_bound)   
+                    corr_time_arr[:, j, k] = [tau, tau_simple,]
+        if save:
+            npz_dict['corr_time_arr'] = corr_time_arr 
+            np.savez(npz_path, **npz_dict)
+        return corr_time_arr
+
+    def calc_susceptibility(self, Ndataset = 0, Nframes = None, 
+                            order_param_func = None, Nscale = True, \
+                            save = True):
+
+        act_list = self.act_list[Ndataset]
+        conv_list = self.conv_list[Ndataset]
+        output_path = self.output_paths[Ndataset]
+        Nact = len(act_list)
+
+        av_def = self.get_arrays_av(Ndataset = Ndataset)[-1]
+        def_arr = self.get_arrays_full(Ndataset = Ndataset)[0]
+
+        if order_param_func is None:
+            order_param = def_arr
+        else:
+            order_param = order_param_func(def_arr, av_def, self.LX[Ndataset])
+        
+        # Initialize arrays
+        sus = np.zeros((Nact, 2)) * np.nan
+
+        for i, act in enumerate(act_list):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                Nfirst_frame = conv_list[i] if Nframes is None else max(def_arr.shape[0] - Nframes, conv_list[i])
+                sus[i,0] = np.nanmean(order_param[Nfirst_frame:, i, :] ** 2,) - np.nanmean(order_param[Nfirst_frame:, i, :]) ** 2
+        if Nscale:
+            sus /= av_def[:, 0][:, None]
+            sus[:,1] = np.sqrt(sus[:,0]/av_def[:,0]) * av_def[:,1]
+        if save:
+            np.save(os.path.join(output_path, 'susceptibility.npy'), sus)
+        return sus
+
+    def print_params(self, Ndataset = 0, act = [], param_keys = ['nstart', 'nsteps']):
+        """
+        Print out the simulation parameters for the given dataset.
+        If act is [], simulation parameters for all activities will be output.
+        """
+
+        # change pathlib to WindowsPath to avoid error
+        temp = pathlib.PosixPath
+        pathlib.PosixPath = pathlib.WindowsPath
+
+        act_path = self.act_dir_list[Ndataset]
+        act_list = self.act_list[Ndataset] if len(act) == 0 else act
+
+        for activity in act_list:
+            # load pkl dictionary
+            act_idx = self.act_list[Ndataset].index(activity)
+            if activity in [0.02, 0.03, 0.2]:
+                activity = str(activity) + '0'
+            base_path = os.path.join(act_path[act_idx], f'zeta_{activity}_counter')
+
+            if os.path.isdir(base_path + '_0'):
+                dict_path = base_path + '_0'
+            elif os.path.isdir(base_path + '_10'):
+                dict_path = base_path + '_10'
+            elif os.path.isdir(base_path + '_20'):
+                dict_path = base_path + '_20'
+            else:
+                print(f"Parameter dictionary was not found for activity {activity}")
+                continue
+
+            dict_path = os.path.join(dict_path, 'model_params.pkl')
+
+            with open(dict_path, 'rb') as f:
+                param_dict = pkl.load(f)
+
+            print(f"\nFor activity = {activity}:")
+            for key in param_keys:
+                try:
+                    print(f"{key}: {param_dict[key]}")
+                except:
+                    print(f"{key} not found in parameter dictionary.")
+        # reset pathlib
+        pathlib.PosixPath = temp
+        return
+
+    def update_conv_list(self, Ndataset_list = None):
+        if Ndataset_list is None:
+            Ndataset_list = range(self.Ndata)
+        
+        for i in Ndataset_list:
+            fig, ax = self.plot_defects_per_activity(Ndataset = i, plot_density = False)
+            plt.show()
+            for j in range(self.Nactivity[i]):
+                self.conv_list[i][j] = int(input(f'Enter the first frame to use for activity {self.act_list[i][j]}: '))
+
+            # save the convergence list
+            np.savetxt(os.path.join(self.output_paths[i], 'conv_list.txt'), self.conv_list[i])
+        return
+
+    def get_arrays_full(self, Ndataset = 0,):
+        """
+        returns defect_arr, av_counts
+        """
+        output_path = self.output_paths[Ndataset]
+        try:
+            defect_arr = np.load(os.path.join(output_path, 'defect_arr.npz'), allow_pickle = True)['defect_arr']  
+            av_counts = np.load(os.path.join(output_path, f'av_counts{self.count_suffix}.npz'), allow_pickle = True)['av_counts']
+        except:
+            print('Arrays not found. Analyse defects first.')
+            return
+        return defect_arr, av_counts
+      
+    def get_arrays_av(self, Ndataset = 0, use_merged = False):
+        """  
+        returns defect_arr_av, var_counts_av, av_counts_av, av_defects
+        """
+
+        output_path, Ndataset = self.__get_outpath_path(Ndataset, use_merged)
 
         try:
-            susceptibility = np.load(os.path.join(self.output_paths[Nbase], 'susceptibility.npy'))
+            defect_arr_av = np.load(os.path.join(output_path, 'defect_arr_av.npy'))
+            var_counts_av = np.load(os.path.join(output_path, f'var_counts_av{self.count_suffix}.npy'))
+            av_counts_av = np.load(os.path.join(output_path, f'av_counts_av{self.count_suffix}.npy'))
+            av_defects = np.load(os.path.join(output_path, 'av_defects.npy'))
         except:
-            print('Base dataset not found. Analyse defects first.')
+            print('Arrays not found. Analyse defects first.')
             return
         
-        # overwrite the activities with the ones from the other datasets according to self.priorities
-        _, Nsorted = zip(*sorted(zip(self.priorities, range(self.Ndata))))
+        return defect_arr_av, var_counts_av, av_counts_av, av_defects
+   
+    def get_susceptibility(self, Ndataset = 0, use_merged = False):
+        """
+        returns susceptibility
+        """
+        if use_merged:
+            output_path = os.path.join(self.output_main_path, 'merged_results')
 
-        for N in Nsorted[1:]:
-            act_idx_list = []
-            for act in self.act_list[N]:
-                act_idx_list.append(self.act_list[Nbase].index(act))
+            if not os.path.isdir(output_path):
+                print(f'Merged results not found. Run merge_results first.')
+                return
+        else:
+            output_path = self.output_paths[Ndataset]
+        try:
+            susceptibility = np.load(os.path.join(output_path, 'susceptibility.npy'))
+        except:
+            print('Susceptibilitites not found. Analyse defects first.')
+            return
+        return susceptibility
 
-            susceptibility[act_idx_list] = np.load(os.path.join(self.output_paths[N], 'susceptibility.npy'))
-        if save:
-            np.save(os.path.join(save_path, 'susceptibility.npy'), susceptibility)
-        return
+    def get_sfac_pcf(self, Ndataset = 0, time_av = True, use_merged = False):
+        """
+        returns kbins, sfac_av, rad, pcf_av
+        """
+        
+        prefix = 'time_' if time_av else ''
+        
+        if use_merged:
+            output_path = os.path.join(self.output_main_path, 'merged_results')
+
+            if not os.path.isdir(output_path):
+                print(f'Merged results not found. Run merge_results first.')
+                return
+        else:
+            output_path = self.output_paths[Ndataset]
+        try:
+            sfac_av = np.load(os.path.join(output_path, f'sfac_{prefix}av.npy'))
+            kbins = np.loadtxt(os.path.join(output_path, 'kbins.txt'))      
+        except:
+            print('Structure factor or pcf not found. Analyse defects first.')
+            return
+        if self.ext_pcf:
+            try:
+                rad = np.load(os.path.join(output_path, 'rad.npy'))
+                pcf_av = np.load(os.path.join(output_path, f'pcf_{prefix}av.npy'))
+            except:
+                rad = None
+                pcf_av = None
+                print('Pair correlation function not found. Assuming not extracted.')
+        else:
+            rad = None
+            pcf_av = None      
+        return kbins, sfac_av, rad, pcf_av
+
+    def get_sfac_pcf_full(self, Ndataset = 0,):
+        """
+        returns kbins, sfac, rad, pcf
+        """
+      
+        output_path = self.output_paths[Ndataset]
+
+        try:
+            sfac = np.load(os.path.join(output_path, f'sfac.npz'), allow_pickle = True)['sfac']
+            kbins = np.loadtxt(os.path.join(output_path, 'kbins.txt'))      
+        except:
+            print('Structure factor not found. Analyse defects first.')
+            return
+        if self.ext_pcf:
+            try:
+                rad = np.load(os.path.join(output_path, 'rad.npy'))
+                pcf = np.load(os.path.join(output_path, 'pcf.npz'), allow_pickle = True)['pcf']
+            except:
+                rad = None
+                pcf = None
+                print('Pair correlation function not found. Assuming not extracted.')
+        else:
+            rad = None
+            pcf = None
+        return kbins, sfac, rad, pcf
     
     def analyze_hyperuniformity(self, Ndataset = 0, fit_dict = {}, window_idx_bounds = None, \
                                 act_idx_bounds = None, use_merged = False, save = True,):
@@ -928,8 +862,6 @@ class AnalyseDefects:
             np.save(os.path.join(output_path, f'stat_arr_{suffix}.npy'), stat_arr)
         return fit_params, stat_arr
 
-   
-    
     def analyze_sfac_time_av(self, Ndataset = 0, Npoints_bounds = [3,7], act_idx_bounds = None,
                             pval_min = 0.01, save = True, save_plots = True, verbose = False):
         """
@@ -1491,43 +1423,6 @@ class AnalyseDefects:
                 os.makedirs(os.path.join(output_path, 'figs'))
             fig.savefig(os.path.join(output_path, f'figs\\alpha_sfac.png'), dpi = 420)
         return fig, ax
-
-    def plot_pair_corr_function_time_av(self, Ndataset = 0, act_idx_bounds = None, use_merged = False, save = False,):
-        """
-        Plot pair correlation function
-        """
-
-        output_path, Ndataset = self.__get_outpath_path(Ndataset, use_merged)
-        act_list = self.act_list_merged if use_merged else self.act_list[Ndataset]
-
-        if act_idx_bounds is None:
-            act_idx_bounds = [0, len(act_list)]
-        try:
-            r, pcf_arr = self.get_sfac_pcf(Ndataset = Ndataset, time_av = True, use_merged = use_merged)[2:]
-            pcf_av = pcf_arr[:, act_idx_bounds[0]:act_idx_bounds[1], 0]
-            pcf_std = pcf_arr[:, act_idx_bounds[0]:act_idx_bounds[1], 1]
-        except:
-            print("No pair correlation function data provided. Analyse defects first.")
-            return
-
-        title = f"Time av. pair correlation function (L = {self.LX[Ndataset]})" 
-        
-        fig, ax = plt.subplots()
-        for i, act in enumerate(act_list[act_idx_bounds[0]:act_idx_bounds[1]]):
-            ax.errorbar(r, pcf_av[:, i], yerr = pcf_std[:, i], fmt = '.', markersize = 4, alpha = 0.5, label = rf'$\zeta$ = {act}')
-
-        ax.set_xlabel(rf"$r$ (radius of observation window)")
-        ax.set_ylabel(rf"$g(r)$")
-        ax.set_title(title)
-        ax.legend(ncol=2)
-        fig.tight_layout()
-
-        if save:
-            if not os.path.isdir(os.path.join(output_path, 'figs')):
-                os.makedirs(os.path.join(output_path, 'figs'))
-            fig.savefig(os.path.join(output_path, f'figs\\pcf.png'), dpi = 420, pad_inches=0.25)
-        return fig, ax
-
 
 
 
