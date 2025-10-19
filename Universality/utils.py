@@ -8,6 +8,7 @@ import warnings
 import time
 import glob
 
+from functools import wraps
 from multiprocessing.pool import Pool as Pool
 
 import numpy as np
@@ -68,12 +69,14 @@ def extract_cid_results(info_dict, verbose=True):
 
     # extract parameter dict for first run
     exp_dirs = [x[0] for x in os.walk(act_dir_list[0])][1:]
+    
     for exp_dir in exp_dirs:
         try:
             with open(os.path.join(exp_dir, f'cid_params{output_suffix}.pkl'), 'rb') as f:
                 cid_params = pkl.load(f)
             with open(os.path.join(save_path, f'cid_params{output_suffix}.pkl'), 'wb') as f:
                 pkl.dump(cid_params, f)
+
             break
         except:
             continue
