@@ -178,3 +178,27 @@ def calc_time_av_ind_samples(data_arr, conv_list, unc_multiplier = 1, ddof = 1,)
             time_av[i, 0]  = np.nanmean(data_arr[ff_idx:, :, i, :], axis = (0, 1, -1))
             time_av[i, 1] = np.nanstd(data_arr[ff_idx:, :, i, :], axis = (0, 1, -1), ddof = ddof) / np.sqrt(Nsamples / unc_multiplier)
     return time_av
+
+def calc_time_avs_ind_samples(data_arr, conv_list, unc_multiplier = 1, ddof = 1,):
+    """
+    data_arr must have shape (Nframes, Nsomething, Nact, Nexp)
+    returns time_av, var_av, var_per_exp
+    """
+
+    Nact = data_arr.shape[2]
+    time_av = np.nan * np.zeros((Nact, 2))
+    var_av = np.nan * np.zeros((Nact))
+    var_per_exp = np.nan * np.zeros((Nact, data_arr.shape[-1]))
+    
+    for i in range(Nact):
+        ff_idx = conv_list[i]
+        Nsamples = np.sum(~np.isnan(data_arr[ff_idx:,:,i,:])) 
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            time_av[i, 0]  = np.nanmean(data_arr[ff_idx:, :, i, :], axis = (0, 1, -1))
+
+            var_val = np.nanvar(data_arr[ff_idx:, :, i, :], axis = (0, 1, -1), ddof = ddof)
+            var_av[i] = var_val
+            time_av[i, 1] = np.sqrt(var_val) / np.sqrt(Nsamples / unc_multiplier)
+            var_per_exp[i,:] = np.nanvar(data_arr[ff_idx:, :, i, :], axis = (0, 1), ddof = ddof)
+    return time_av, var_av, var_per_exp
