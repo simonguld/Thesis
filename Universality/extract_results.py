@@ -21,8 +21,10 @@ plt.rcParams['legend.handlelength'] = 0
 
 from utils import extract_cid_results, gen_conv_list, calc_time_avs_ind_samples
 
-from ComputableInformationDensity.cid import interlaced_time, cid2d
-from ComputableInformationDensity.computable_information_density import cid
+sys.path.append('ComputableInformationDensity_dev')
+from ComputableInformationDensity_dev.cid import interlaced_time, cid2d
+from ComputableInformationDensity_dev.computable_information_density import cid, cid_shuffle
+from ComputableInformationDensity_dev.hilbert_curve import hilbert_curve, itter_hscan
 
 # Get absolute path to this notebook
 notebook_path = Path().resolve()
