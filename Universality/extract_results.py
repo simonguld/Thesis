@@ -19,7 +19,8 @@ plt.style.use('sg_article')
 plt.rcParams.update({"text.usetex": True,})
 plt.rcParams['legend.handlelength'] = 0
 
-from utils import extract_cid_results, gen_conv_list, calc_time_avs_ind_samples
+from utils import extract_cid_results, gen_conv_list, calc_time_avs_ind_samples, calc_moments
+from utils_plot import plot_moments
 
 sys.path.append('ComputableInformationDensity_dev')
 from ComputableInformationDensity_dev.cid import interlaced_time, cid2d
@@ -363,5 +364,21 @@ def main():
             fig.savefig(os.path.join(figs_save_path, figname) ,bbox_inches='tight', dpi=620, pad_inches=.05)
             fig.clf()
 
+            ### Plot moments
+            moment_dict = {}
+            div_moment_dict = {}
+            for LX in L_list:
+                moment_dict[LX] = calc_moments(cid_dict[LX][...,0], conv_dict[LX],)
+                div_moment_dict[LX] = calc_moments(1-frac_dict[LX][...,0], conv_dict[LX],)
+
+            fig, ax = plot_moments(moment_dict, act_dict=act_dict, L_list=L_list[1:], moment_label=r'CID',\
+                                    plot_binder=False, \
+                                savepath=os.path.join(figs_save_path, f'cid_moments{output_suffix}.pdf'))
+            fig.clf()
+            fig, ax = plot_moments(div_moment_dict, act_dict=act_dict, L_list=L_list[1:], moment_label=r'$\mathcal{D}$',\
+                                plot_binder=False, \
+                                savepath=os.path.join(figs_save_path, f'div_moments{output_suffix}.pdf'))
+            fig.clf()
+            
 if __name__ == '__main__':
     main()

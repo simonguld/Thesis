@@ -1,5 +1,5 @@
 # Author: Simon Guldager Andersen
-# Date(last edit): Nov. 11 - 2024
+
 
 ## Imports:
 import os
@@ -12,6 +12,7 @@ from functools import wraps
 from multiprocessing.pool import Pool as Pool
 
 import numpy as np
+from scipy.stats import moment
 
 
 # Helper functions -------------------------------------------------------------------
@@ -202,3 +203,41 @@ def calc_time_avs_ind_samples(data_arr, conv_list, unc_multiplier = 1, ddof = 1,
             time_av[i, 1] = np.sqrt(var_val) / np.sqrt(Nsamples / unc_multiplier)
             var_per_exp[i,:] = np.nanvar(data_arr[ff_idx:, :, i, :], axis = (0, 1), ddof = ddof)
     return time_av, var_av, var_per_exp
+
+def calc_moments(data_arr, conv_list, center=None, norm_factor=None):
+    """
+    Calculate 1st–4th moments over the frame(s) and experiment dimensions
+    for each act, allowing variable intermediate dimensions (e.g. partitions).
+
+    Parameters
+    ----------
+    data_arr : np.ndarray
+        Array of shape (Nframes, ..., Nact, Nexp)
+    conv_list : list[int]
+        List of starting frame indices for each act.
+    center : float, optional
+        Central value for moment calculation.
+    norm_factor : float or None, optional
+        Normalization factor for data_arr.
+
+    Returns
+    -------
+    moments : np.ndarray
+        Array of shape (4, Nact)
+    """
+
+    Nact = data_arr.shape[-2]
+    moments = np.zeros((4, Nact))
+    
+    normalization = norm_factor if norm_factor is not None else 1.0
+    defects = data_arr / normalization
+
+    for i in range(Nact):
+        data_slice = defects[conv_list[i]:, ..., i, :]
+        
+        # Compute 1st–4th moments
+        for j in range(4):
+            moments[j, i]  = moment(data_slice,moment=j + 1, \
+                            axis=tuple(range(data_slice.ndim)), \
+                            center=0 if j==0 else center, nan_policy='omit')
+    return moments
