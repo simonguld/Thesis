@@ -241,3 +241,35 @@ def calc_moments(data_arr, conv_list, center=None, norm_factor=None):
                             axis=tuple(range(data_slice.ndim)), \
                             center=0 if j==0 else center, nan_policy='omit')
     return moments
+
+def calc_av_along_axes(data_arr, axes_to_average = (-1,), unc_multiplier = 1, ddof = 1,):
+    """
+    Calculate average and standard error of the mean for specified axes (e.g. frames, experiments), allowing variable intermediate dimensions (e.g. partitions).
+    Parameters
+    ----------
+    data_arr : np.ndarray
+        Array of shape (Nframes, ..., Nact, Nsomething) or (Nframes, ..., Nact)
+    axes_to_average : tuple[int]
+        Axes to average over (e.g. frames, experiments).
+    unc_multiplier : float
+        Multiplier for uncertainty calculation. Num. of samples is divided by this value.
+    ddof : int
+        Delta degrees of freedom for standard deviation calculation.
+    Returns
+    -------
+    moments : np.ndarray
+        Array with shape set by axes_to_average. last dimension corresponds to av/sem.
+    """
+    
+    shape = data_arr.shape
+    axes_to_average = tuple(i%len(shape) for i in axes_to_average)
+    shape_av = tuple(dim for i, dim in enumerate(shape) if i not in axes_to_average) + (2,)
+
+    av_array = np.nan * np.zeros(shape_av)
+    Nsamples = np.sum(~np.isnan(data_arr), axis=axes_to_average)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        av_array[..., 0]  = np.nanmean(data_arr, axis = axes_to_average)
+        av_array[..., 1] = np.nanstd(data_arr, axis = axes_to_average, ddof = ddof) / np.sqrt(Nsamples / unc_multiplier)
+    return av_array
