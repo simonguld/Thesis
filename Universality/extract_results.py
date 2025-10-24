@@ -62,6 +62,7 @@ def main():
     cg = args.cg
 
     verbose = True
+    cap_cid = True
     nexp = 5
 
     for nbits in nbits_list:
@@ -124,13 +125,16 @@ def main():
             cid_arr = data_npz['cid']
             cid_shuffle_arr = data_npz['cid_shuffle']
             cid_frac_arr = data_npz['cid_frac']
+            if cap_cid:
+                frac_mask = cid_frac_arr[...,0] > 1
+                cid_frac_arr[...,0][frac_mask] = 1.0
             act_dict[LX] = data_npz['act_list']
             conv_dict[LX] = np.load(os.path.join(save_path, f'conv_list_cubes{output_suffix}.npy'), allow_pickle=True)
 
             if calc_time_av:
-                cid_time_av, cid_var, cid_var_per_exp = calc_time_avs_ind_samples(cid_arr[:,:,:,:,0], conv_dict[LX], unc_multiplier=uncertainty_multiplier)
-                cid_shuffle_time_av, cid_shuffle_var, cid_shuffle_var_per_exp = calc_time_avs_ind_samples(cid_shuffle_arr[:,:,:,:,0], conv_dict[LX], unc_multiplier=uncertainty_multiplier)
-                cid_frac_time_av, cid_frac_var, cid_frac_var_per_exp = calc_time_avs_ind_samples(cid_frac_arr[:,:,:,:,0], conv_dict[LX], unc_multiplier=uncertainty_multiplier)
+                cid_time_av, cid_var, cid_var_per_exp = calc_time_avs_ind_samples(cid_arr[...,:,:,0], conv_dict[LX], unc_multiplier=uncertainty_multiplier)
+                cid_shuffle_time_av, cid_shuffle_var, cid_shuffle_var_per_exp = calc_time_avs_ind_samples(cid_shuffle_arr[...,0], conv_dict[LX], unc_multiplier=uncertainty_multiplier)
+                cid_frac_time_av, cid_frac_var, cid_frac_var_per_exp = calc_time_avs_ind_samples(cid_frac_arr[...,0], conv_dict[LX], unc_multiplier=uncertainty_multiplier)
 
                 np.savez_compressed(os.path.join(save_path, f'cid_time_av{output_suffix}.npz'),
                                     cid_time_av=cid_time_av,
@@ -221,7 +225,7 @@ def main():
                 ax0[i].set_xlabel(r'Activity ($\tilde{\zeta}$)')
 
             fig.savefig(os.path.join(figs_save_path, f'div_ddiv.pdf') ,bbox_inches='tight', dpi=620, pad_inches=.05)
-            fig.clf()
+            plt.close()
 
             ### Plot cid and its derivative with respect to activity
             fig, ax0 = plt.subplots(ncols=2, figsize=(10,4))
@@ -264,7 +268,7 @@ def main():
         
             fig.savefig(os.path.join(figs_save_path, f'cid_dcid.pdf'), \
                         bbox_inches='tight', dpi=620, pad_inches=.05)
-            fig.clf()
+            plt.close()
 
             ### Plot cid variance and derivative
             fig, ax0 = plt.subplots(ncols=3, figsize=(12,4))
@@ -296,10 +300,25 @@ def main():
 
                 dcid_vals = np.abs(deriv_cid / np.nanmax(deriv_cid)) if plot_abs else deriv_cid / np.nanmax(deriv_cid)
 
-                ax.plot(act_list, varall / np.nanmax(varall), label=r'$\mathrm{Var} (CID)$ (all)', marker='d', lw=1, alpha=.5)
-                ax.errorbar(act_list, varper_av / np.nanmax(varper_av), yerr=varper_sem / np.nanmax(varper_av), fmt='*', alpha=0.5, capsize=3, label=r'$\mathrm{Var} (CID)$ (per exp)', lw=1
-                            )
-                ax.plot(act_diff_tot, dcid_vals, marker='v', label=r'Abs(d$CID$ / d$\tilde{\zeta}$)', lw=1, alpha=.5)
+                dcid_per = deriv_cid / (0.5 * (cid_time_av[:,0][:-1] + cid_time_av[:,0][1:]))
+                dcid_per_vals = np.abs(dcid_per / np.nanmax(dcid_per)) if plot_abs else dcid_per / np.nanmax(dcid_per)
+
+                if plot_abs:
+                    ylabel_per = r'$\left|d\textrm{CID}/d\tilde{\zeta}\right| / \left|\textrm{CID} \right|$'
+                    ylabel = r'$\left|d\textrm{CID}/d$\tilde{\zeta}\right|$'
+                    div_ylabel = r'$\left|d\mathcal{D}/d\tilde{\zeta}\right|$' 
+
+                    ylabel_per = r'$\vert d\textrm{CID}/d\tilde{\zeta}\vert / \vert\textrm{CID} \vert$'
+                    ylabel = r'$\vert d\textrm{CID}/d\tilde{\zeta}\vert$'
+                else:
+                    ylabel_per = r'$\frac{d \textrm{CID}}{d\tilde{\zeta}} / \textrm{CID}$'
+                    ylabel = r'$\frac{d \textrm{CID}}{d\tilde{\zeta}}$'
+                    div_ylabel = r'$\frac{d\mathcal{D}}{d\tilde{\zeta}}$'
+
+            #    ax.plot(act_list, varall / np.nanmax(varall), label=r'$\mathrm{Var} (CID)$ (all)', marker='d', lw=1, alpha=.5)
+                ax.errorbar(act_list, varper_av / np.nanmax(varper_av), yerr=varper_sem / np.nanmax(varper_av), fmt='*', alpha=0.5, capsize=3, label=r'$\mathrm{Var} (CID)$', lw=1)
+                ax.plot(act_diff_tot, dcid_vals, marker='v', label=ylabel, lw=1, alpha=.5)
+                ax.plot(act_diff_tot, dcid_per_vals, marker='^', label=ylabel_per, lw=1, alpha=.5)
 
                 ax.set_title(f'L={LX}')
                 ax.set_xlim(0.018,0.035)
@@ -310,7 +329,7 @@ def main():
 
             figname = 'cid_fluc.pdf'
             fig.savefig(os.path.join(figs_save_path, figname) ,bbox_inches='tight', dpi=620, pad_inches=.05)
-            fig.clf()
+            plt.close()
 
             ### Plot div variance and derivative
             fig, ax0 = plt.subplots(ncols=3, figsize=(12,4))
@@ -362,7 +381,7 @@ def main():
 
             figname = 'div_fluc.pdf'
             fig.savefig(os.path.join(figs_save_path, figname) ,bbox_inches='tight', dpi=620, pad_inches=.05)
-            fig.clf()
+            plt.close()
 
             ### Plot moments
             moment_dict = {}
@@ -374,11 +393,11 @@ def main():
             fig, ax = plot_moments(moment_dict, act_dict=act_dict, L_list=L_list[1:], moment_label=r'CID',\
                                     plot_binder=False, \
                                 savepath=os.path.join(figs_save_path, f'cid_moments{output_suffix}.pdf'))
-            fig.clf()
+            plt.close()
             fig, ax = plot_moments(div_moment_dict, act_dict=act_dict, L_list=L_list[1:], moment_label=r'$\mathcal{D}$',\
                                 plot_binder=False, \
                                 savepath=os.path.join(figs_save_path, f'div_moments{output_suffix}.pdf'))
-            fig.clf()
+            plt.close()
             
 if __name__ == '__main__':
     main()
