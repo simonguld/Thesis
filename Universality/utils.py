@@ -7,6 +7,7 @@ import pickle as pkl
 import warnings
 import time
 import glob
+import argparse
 
 from functools import wraps
 from multiprocessing.pool import Pool as Pool
@@ -16,6 +17,16 @@ from scipy.stats import moment
 
 
 # Helper functions -------------------------------------------------------------------
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 def timeit(func):
     @wraps(func)   # keeps function name/docs intact
@@ -27,6 +38,180 @@ def timeit(func):
         return result
     return wrapper
 
+def block_flatten(array, m, k):
+    """
+    Efficiently flatten a 2D array into m x k blocks traversed horizontally.
+    
+    Parameters:
+        array (np.ndarray): Input 2D array of shape (M, N)
+        m (int): Number of rows per block
+        k (int): Number of columns per block
+        
+    Returns:
+        np.ndarray: Flattened 1D array of blocks
+    """
+    M, N = array.shape
+
+    # Check divisibility
+    if M % m != 0:
+        raise ValueError(f"Number of rows {M} is not divisible by block row size {m}.")
+    if N % k != 0:
+        raise ValueError(f"Number of columns {N} is not divisible by block column size {k}.")
+    
+    # Reshape array into blocks
+    reshaped = array.reshape(M//m, m, N//k, k)
+    # Transpose to bring blocks into row-major order: (block_row, block_col, m, k)
+    reshaped = reshaped.transpose(0, 2, 1, 3)
+    # Flatten all blocks
+    return reshaped.reshape(-1)
+
+# Statistics functions -------------------------------------------------------------------
+
+def calc_derivative(xvals, yvals, yerrs):
+    """
+    Calculate the numerical derivative of yvals with respect to xvals,
+    along with the propagated errors.
+    Parameters:
+    xvals : array-like
+        The x-values.
+    yvals : array-like
+        The y-values.
+    yerrs : array-like
+        The errors associated with the y-values.
+    Returns:
+    x_diff_tot : array-like
+        The midpoints of the x-values where the derivative is calculated.
+    deriv : array-like
+        The numerical derivative of yvals with respect to xvals.
+    deriv_err : array-like
+        The propagated errors of the derivative.
+    """
+    frac_diff = np.diff(yvals) 
+    x_diff = np.array(xvals[1:]) - np.array(xvals[:-1])
+    x_diff_tot = np.array(xvals[:-1]) + x_diff/2
+    deriv = frac_diff / x_diff
+    deriv_err = np.sqrt(yerrs[1:]**2 + yerrs[:-1]**2) / x_diff
+    return x_diff_tot, deriv, deriv_err
+
+def calc_time_av_ind_samples(data_arr, conv_list, unc_multiplier = 1, ddof = 1,):
+    """
+    data_arr must have shape (Nframes, Nsomething, Nact, Nexp)
+    returns an array of shape (Nact, 2)
+    """
+
+    Nact = data_arr.shape[2]
+    time_av = np.nan * np.zeros((Nact, 2))
+    
+    for i in range(Nact):
+        ff_idx = conv_list[i]
+        Nsamples = np.sum(~np.isnan(data_arr[ff_idx:,:,i,:])) 
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            time_av[i, 0]  = np.nanmean(data_arr[ff_idx:, :, i, :], axis = (0, 1, -1))
+            time_av[i, 1] = np.nanstd(data_arr[ff_idx:, :, i, :], axis = (0, 1, -1), ddof = ddof) / np.sqrt(Nsamples / unc_multiplier)
+    return time_av
+
+def calc_time_avs_ind_samples(data_arr, conv_list, Nexp=1, unc_multiplier = 1, ddof = 1,):
+    """
+    data_arr must have shape (Nframes, Nsomething, Nact, Nexp) or (Nframes, Nsomething, Nact)
+    returns time_av, var_av, var_per_exp
+    """
+
+    act_axis = -2 if Nexp > 1 else -1
+    Nact = data_arr.shape[act_axis]
+
+    time_av = np.nan * np.zeros((Nact, 2))
+    var_av = np.nan * np.zeros((Nact,))
+    var_per_exp = np.nan * np.zeros((Nact, 2)) if Nexp > 1 else None
+    
+    for i in range(Nact):
+        ff_idx = conv_list[i]
+        data_slice = data_arr[ff_idx:, :, i, :] if Nexp > 1 else data_arr[ff_idx:, :, i]
+        Nsamples = np.sum(~np.isnan(data_slice)) 
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            time_av[i, 0]  = np.nanmean(data_slice)
+            var_val = np.nanvar(data_slice, ddof = ddof)
+            var_av[i] = var_val
+            time_av[i, 1] = np.sqrt(var_val) / np.sqrt(Nsamples / unc_multiplier)
+            if Nexp > 1:
+                vars_per_exp = np.nanvar(data_slice, axis = (0, 1), ddof = ddof)
+                var_per_exp[i, 0] = np.nanmean(vars_per_exp)
+                var_per_exp[i, 1] = np.nanstd(vars_per_exp) / np.sqrt(Nexp)
+            else:
+                pass
+    return time_av, var_av, var_per_exp
+
+def calc_moments(data_arr, conv_list, center=None, norm_factor=None):
+    """
+    Calculate 1st–4th moments over the frame(s) and experiment dimensions
+    for each act, allowing variable intermediate dimensions (e.g. partitions).
+
+    Parameters
+    ----------
+    data_arr : np.ndarray
+        Array of shape (Nframes, ..., Nact, Nexp)
+    conv_list : list[int]
+        List of starting frame indices for each act.
+    center : float, optional
+        Central value for moment calculation.
+    norm_factor : float or None, optional
+        Normalization factor for data_arr.
+
+    Returns
+    -------
+    moments : np.ndarray
+        Array of shape (4, Nact)
+    """
+
+    Nact = data_arr.shape[-2]
+    moments = np.zeros((4, Nact))
+    
+    normalization = norm_factor if norm_factor is not None else 1.0
+    defects = data_arr / normalization
+
+    for i in range(Nact):
+        data_slice = defects[conv_list[i]:, ..., i, :]
+        
+        # Compute 1st–4th moments
+        for j in range(4):
+            moments[j, i]  = moment(data_slice,moment=j + 1, \
+                            axis=tuple(range(data_slice.ndim)), \
+                            center=0 if j==0 else center, nan_policy='omit')
+    return moments
+
+def calc_av_along_axes(data_arr, axes_to_average = (-1,), unc_multiplier = 1, ddof = 1,):
+    """
+    Calculate average and standard error of the mean for specified axes (e.g. frames, experiments), allowing variable intermediate dimensions (e.g. partitions).
+    Parameters
+    ----------
+    data_arr : np.ndarray
+        Array of shape (Nframes, ..., Nact, Nsomething) or (Nframes, ..., Nact)
+    axes_to_average : tuple[int]
+        Axes to average over (e.g. frames, experiments).
+    unc_multiplier : float
+        Multiplier for uncertainty calculation. Num. of samples is divided by this value.
+    ddof : int
+        Delta degrees of freedom for standard deviation calculation.
+    Returns
+    -------
+    moments : np.ndarray
+        Array with shape set by axes_to_average. last dimension corresponds to av/sem.
+    """
+    
+    shape = data_arr.shape
+    axes_to_average = tuple(i%len(shape) for i in axes_to_average)
+    shape_av = tuple(dim for i, dim in enumerate(shape) if i not in axes_to_average) + (2,)
+
+    av_array = np.nan * np.zeros(shape_av)
+    Nsamples = np.sum(~np.isnan(data_arr), axis=axes_to_average)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        av_array[..., 0]  = np.nanmean(data_arr, axis = axes_to_average)
+        av_array[..., 1] = np.nanstd(data_arr, axis = axes_to_average, ddof = ddof) / np.sqrt(Nsamples / unc_multiplier)
+    return av_array
 
 # CID related functions -------------------------------------------------------------------
 
@@ -110,7 +295,6 @@ def extract_cid_results(info_dict, verbose=True):
     if verbose: print(f'cid data saved to {os.path.join(save_path, f"cid_data{output_suffix}.npz")}')
     return
 
-
 def get_allowed_time_intervals(system_size, nbits_max = 8):
     """
     Get allowed intervals for CID calculation based on system size and max bits.
@@ -135,141 +319,4 @@ def get_allowed_time_intervals(system_size, nbits_max = 8):
     return allowed_intervals
 
 
-def block_flatten(array, m, k):
-    """
-    Efficiently flatten a 2D array into m x k blocks traversed horizontally.
-    
-    Parameters:
-        array (np.ndarray): Input 2D array of shape (M, N)
-        m (int): Number of rows per block
-        k (int): Number of columns per block
-        
-    Returns:
-        np.ndarray: Flattened 1D array of blocks
-    """
-    M, N = array.shape
 
-    # Check divisibility
-    if M % m != 0:
-        raise ValueError(f"Number of rows {M} is not divisible by block row size {m}.")
-    if N % k != 0:
-        raise ValueError(f"Number of columns {N} is not divisible by block column size {k}.")
-    
-    # Reshape array into blocks
-    reshaped = array.reshape(M//m, m, N//k, k)
-    # Transpose to bring blocks into row-major order: (block_row, block_col, m, k)
-    reshaped = reshaped.transpose(0, 2, 1, 3)
-    # Flatten all blocks
-    return reshaped.reshape(-1)
-
-def calc_time_av_ind_samples(data_arr, conv_list, unc_multiplier = 1, ddof = 1,):
-    """
-    data_arr must have shape (Nframes, Nsomething, Nact, Nexp)
-    returns an array of shape (Nact, 2)
-    """
-
-    Nact = data_arr.shape[2]
-    time_av = np.nan * np.zeros((Nact, 2))
-    
-    for i in range(Nact):
-        ff_idx = conv_list[i]
-        Nsamples = np.sum(~np.isnan(data_arr[ff_idx:,:,i,:])) 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            time_av[i, 0]  = np.nanmean(data_arr[ff_idx:, :, i, :], axis = (0, 1, -1))
-            time_av[i, 1] = np.nanstd(data_arr[ff_idx:, :, i, :], axis = (0, 1, -1), ddof = ddof) / np.sqrt(Nsamples / unc_multiplier)
-    return time_av
-
-def calc_time_avs_ind_samples(data_arr, conv_list, unc_multiplier = 1, ddof = 1,):
-    """
-    data_arr must have shape (Nframes, Nsomething, Nact, Nexp)
-    returns time_av, var_av, var_per_exp
-    """
-
-    Nact = data_arr.shape[2]
-    time_av = np.nan * np.zeros((Nact, 2))
-    var_av = np.nan * np.zeros((Nact))
-    var_per_exp = np.nan * np.zeros((Nact, data_arr.shape[-1]))
-    
-    for i in range(Nact):
-        ff_idx = conv_list[i]
-        Nsamples = np.sum(~np.isnan(data_arr[ff_idx:,:,i,:])) 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            time_av[i, 0]  = np.nanmean(data_arr[ff_idx:, :, i, :], axis = (0, 1, -1))
-
-            var_val = np.nanvar(data_arr[ff_idx:, :, i, :], axis = (0, 1, -1), ddof = ddof)
-            var_av[i] = var_val
-            time_av[i, 1] = np.sqrt(var_val) / np.sqrt(Nsamples / unc_multiplier)
-            var_per_exp[i,:] = np.nanvar(data_arr[ff_idx:, :, i, :], axis = (0, 1), ddof = ddof)
-    return time_av, var_av, var_per_exp
-
-def calc_moments(data_arr, conv_list, center=None, norm_factor=None):
-    """
-    Calculate 1st–4th moments over the frame(s) and experiment dimensions
-    for each act, allowing variable intermediate dimensions (e.g. partitions).
-
-    Parameters
-    ----------
-    data_arr : np.ndarray
-        Array of shape (Nframes, ..., Nact, Nexp)
-    conv_list : list[int]
-        List of starting frame indices for each act.
-    center : float, optional
-        Central value for moment calculation.
-    norm_factor : float or None, optional
-        Normalization factor for data_arr.
-
-    Returns
-    -------
-    moments : np.ndarray
-        Array of shape (4, Nact)
-    """
-
-    Nact = data_arr.shape[-2]
-    moments = np.zeros((4, Nact))
-    
-    normalization = norm_factor if norm_factor is not None else 1.0
-    defects = data_arr / normalization
-
-    for i in range(Nact):
-        data_slice = defects[conv_list[i]:, ..., i, :]
-        
-        # Compute 1st–4th moments
-        for j in range(4):
-            moments[j, i]  = moment(data_slice,moment=j + 1, \
-                            axis=tuple(range(data_slice.ndim)), \
-                            center=0 if j==0 else center, nan_policy='omit')
-    return moments
-
-def calc_av_along_axes(data_arr, axes_to_average = (-1,), unc_multiplier = 1, ddof = 1,):
-    """
-    Calculate average and standard error of the mean for specified axes (e.g. frames, experiments), allowing variable intermediate dimensions (e.g. partitions).
-    Parameters
-    ----------
-    data_arr : np.ndarray
-        Array of shape (Nframes, ..., Nact, Nsomething) or (Nframes, ..., Nact)
-    axes_to_average : tuple[int]
-        Axes to average over (e.g. frames, experiments).
-    unc_multiplier : float
-        Multiplier for uncertainty calculation. Num. of samples is divided by this value.
-    ddof : int
-        Delta degrees of freedom for standard deviation calculation.
-    Returns
-    -------
-    moments : np.ndarray
-        Array with shape set by axes_to_average. last dimension corresponds to av/sem.
-    """
-    
-    shape = data_arr.shape
-    axes_to_average = tuple(i%len(shape) for i in axes_to_average)
-    shape_av = tuple(dim for i, dim in enumerate(shape) if i not in axes_to_average) + (2,)
-
-    av_array = np.nan * np.zeros(shape_av)
-    Nsamples = np.sum(~np.isnan(data_arr), axis=axes_to_average)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        av_array[..., 0]  = np.nanmean(data_arr, axis = axes_to_average)
-        av_array[..., 1] = np.nanstd(data_arr, axis = axes_to_average, ddof = ddof) / np.sqrt(Nsamples / unc_multiplier)
-    return av_array
