@@ -368,13 +368,13 @@ class AnalyseDefects:
         Ndataset_list = range(self.Ndata) if Ndataset_list is None else Ndataset_list
 
         for N in Ndataset_list:
-            while True:
-                try:
-                    defect_arr, av_counts = self.get_arrays_full(N)
-                    break
-                except:
-                    print('Defect array not found. They will be extracted now.')
-                    self.extract_results()
+
+            try:
+                defect_arr, av_counts = self.get_arrays_full(N)
+            except Exception:
+                print('Defect array not found. Extracting now...')
+                self.extract_results()
+                defect_arr, av_counts = self.get_arrays_full(N)
 
             if len(np.unique(self.conv_list[N])) == 1:
                 print(f'NB: All simulations are set to converge at the first frame for dataset {N}. To change this, call update_conv_list.\n')
