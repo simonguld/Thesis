@@ -3,6 +3,7 @@
 ## Imports:
 import numpy as np
 import matplotlib.pyplot as plt
+from sympy import div
 
 # CID plotting functions -------------------------------------------------------------------
 
@@ -98,6 +99,7 @@ def plot_cid_and_derivative(L_list, act_dict, cid_time_av_dict, \
         xlim = ax.get_xlim() if xlims is None else xlims
         ax.set_xlim(xlim)
         ax.set_ylim(ax.get_ylim())
+        ax.hlines(0, xlim[0], xlim[1], colors='black', linestyles='solid', lw=1, alpha=0.8,zorder=-5)
 
     if plot_abs:
         dy_label = r'$\vert d\textrm{CID}/d \tilde{\zeta} \vert$'
@@ -171,6 +173,7 @@ def plot_div_and_derivative(L_list, act_dict, frac_time_av_dict, \
         xlim = ax.get_xlim() if xlims is None else xlims
         ax.set_xlim(xlim)
         ax.set_ylim(ax.get_ylim())
+        ax.hlines(0, xlim[0], xlim[1], colors='black', linestyles='solid', lw=1, alpha=0.8,zorder=-5)
     if plot_abs:
         dy_label = r'$\vert d\mathcal{D}/d \tilde{\zeta} \vert$'
     else:
@@ -217,7 +220,10 @@ def plot_cid_fluctuations(L_list, act_dict, cid_time_av_dict, cid_var_dict, dcid
         The created figure and axes.
     """
 
-    fig, ax = plt.subplots(ncols=3, figsize=(12,4))
+    ncols = len(L_list)
+    w = 4 * ncols
+    #w += 1 if ncols < 3 else 0
+    fig, ax0 = plt.subplots(ncols=ncols, figsize=(w,4))
     marker_shape = ['d-', 'o-', '^-', 'v-', 'D-', 'P-', 'X-', 'h-', 
                     'd-', 'p-', 'H-', '8-', '1-', '2-']
     
@@ -229,6 +235,8 @@ def plot_cid_fluctuations(L_list, act_dict, cid_time_av_dict, cid_var_dict, dcid
         dylabel = r'$\frac{d \textrm{CID}}{d\tilde{\zeta}}$'
 
     for i, LX in enumerate(L_list):
+        ax = ax0 if ncols == 1 else ax0[i]
+
         act_list = act_dict[LX]
         act_diff_tot = act_list[:-1] + np.diff(act_list) / 2
         cid_tav = cid_time_av_dict[LX].copy()
@@ -241,29 +249,38 @@ def plot_cid_fluctuations(L_list, act_dict, cid_time_av_dict, cid_var_dict, dcid
         deriv_cid_per = deriv_cid / normalizer[:, None]
 
         # normalize by magnitude
-        cid_var /= np.nanmax(cid_var[:, 0])
+        cid_ndims = cid_var.ndim
+        cid_var /= np.nanmax(cid_var[:, 0]) if cid_ndims == 2 else np.nanmax(cid_var)
         deriv_cid /= np.nanmax(np.abs(deriv_cid))
         deriv_cid_per /= np.nanmax(np.abs(deriv_cid_per))
 
-        ax[i].errorbar(act_list,cid_var[:, 0],yerr=cid_var[:, 1],
-            fmt=marker_shape[0],
-            lw=1,label=r'$\mathrm{Var} (CID)$',
-            elinewidth=1.5, alpha=0.6)
-        ax[i].errorbar(act_diff_tot,deriv_cid[:, 0],yerr=deriv_cid[:, 1],
+        if cid_ndims == 2:
+            ax.errorbar(act_list,cid_var[:, 0],yerr=cid_var[:, 1],
+                fmt=marker_shape[0],
+                lw=1,label=r'$\mathrm{Var} (CID)$',
+                elinewidth=1.5, alpha=0.6)
+        else:
+            ax.plot(act_list,cid_var,
+                marker=marker_shape[0][0],
+                lw=1,label=r'$\mathrm{Var} (CID)$',
+                alpha=0.6)
+        ax.errorbar(act_diff_tot,deriv_cid[:, 0],yerr=deriv_cid[:, 1],
             fmt=marker_shape[1],
             lw=1, label=dylabel,
             elinewidth=1.5, alpha=0.6)
-        ax[i].errorbar(act_diff_tot,deriv_cid_per[:, 0],yerr=deriv_cid_per[:, 1],
+        ax.errorbar(act_diff_tot,deriv_cid_per[:, 0],yerr=deriv_cid_per[:, 1],
             fmt=marker_shape[2],
             lw=1, label=dylabel_per,
             elinewidth=1.5, alpha=0.6)  
-        ax[i].set_title(f'L={LX}')
+        ax.set_title(f'L={LX}')
 
+    ax = [ax0] if ncols == 1 else ax0
     for axx in ax:
         axx.set(xlabel=r'Activity ($\tilde{\zeta}$)')
         xlim = axx.get_xlim() if xlims is None else xlims
         axx.set_xlim(xlim)
         axx.set_ylim(axx.get_ylim())
+        axx.hlines(0, xlim[0], xlim[1], colors='black', linestyles='solid', lw=1, alpha=0.8,zorder=-5)
         axx.legend()
 
     fig.tight_layout()
@@ -304,8 +321,10 @@ def plot_div_fluctuations(L_list, act_dict, frac_time_av_dict, dfrac_dict, div_v
     fig, ax : matplotlib.figure.Figure, matplotlib.axes.Axes
         The created figure and axes.
     """
-
-    fig, ax = plt.subplots(ncols=3, figsize=(12,4))
+    ncols = len(L_list)
+    w = 4 * ncols
+    #w += 1 if ncols < 3 else 0
+    fig, ax0 = plt.subplots(ncols=ncols, figsize=(w,4))
     marker_shape = ['d-', 'o-', '^-', 'v-', 'D-', 'P-', 'X-', 'h-', 
                     'd-', 'p-', 'H-', '8-', '1-', '2-']
     if plot_abs:
@@ -316,6 +335,8 @@ def plot_div_fluctuations(L_list, act_dict, frac_time_av_dict, dfrac_dict, div_v
         dylabel = r'$\frac{d\mathrm{Div}}{d\tilde{\zeta}}$'
 
     for i, LX in enumerate(L_list):
+        ax = ax0 if ncols == 1 else ax0[i]
+
         act_list = act_dict[LX]
         act_diff_tot = act_list[:-1] + np.diff(act_list) / 2
         
@@ -333,30 +354,40 @@ def plot_div_fluctuations(L_list, act_dict, frac_time_av_dict, dfrac_dict, div_v
         deriv_div_per = deriv_div / normalizer[:, None]
 
         # normalize by magnitude
-        div_var /= np.nanmax(div_var[:, 0])
+        div_ndims = div_var.ndim
+        div_var /= np.nanmax(div_var[:, 0]) if div_ndims == 2 else np.nanmax(div_var)
         deriv_div /= np.nanmax(np.abs(deriv_div))
         deriv_div_per /= np.nanmax(np.abs(deriv_div_per))
 
-        ax[i].errorbar(act_list,div_var[:, 0],yerr=div_var[:, 1],
-            fmt=marker_shape[0],
-            lw=1,label=r'$\mathrm{Var} (\mathrm{Div})$',
-            elinewidth=1.5, alpha=0.6)
-        ax[i].errorbar(act_diff_tot,deriv_div[:, 0],yerr=deriv_div[:, 1],
+        if div_ndims == 2:
+            ax.errorbar(act_list,div_var[:, 0],yerr=div_var[:, 1],
+                fmt=marker_shape[0],
+                lw=1,label=r'$\mathrm{Var} (\mathrm{Div})$',
+                elinewidth=1.5, alpha=0.6)
+        else:
+            ax.plot(act_list,div_var,
+                marker=marker_shape[0][0],
+                lw=1,label=r'$\mathrm{Var} (\mathrm{Div})$',
+                alpha=0.6)
+
+        ax.errorbar(act_diff_tot,deriv_div[:, 0],yerr=deriv_div[:, 1],
             fmt=marker_shape[1],
             lw=1, label=dylabel,
             elinewidth=1.5, alpha=0.6)
         if plot_div_per:
-            ax[i].errorbar(act_diff_tot,deriv_div_per[:, 0],yerr=deriv_div_per[:, 1],
+            ax.errorbar(act_diff_tot,deriv_div_per[:, 0],yerr=deriv_div_per[:, 1],
                 fmt=marker_shape[2],
                 lw=1, label=dylabel_per,
                 elinewidth=1.5, alpha=0.6)  
-        ax[i].set_title(f'L={LX}')
+        ax.set_title(f'L={LX}')
 
+    ax = [ax0] if ncols == 1 else ax0
     for axx in ax:
         axx.set(xlabel=r'Activity ($\tilde{\zeta}$)')
         xlim = axx.get_xlim() if xlims is None else xlims
         axx.set_xlim(xlim)
         axx.set_ylim(axx.get_ylim())
+        axx.hlines(0, xlim[0], xlim[1], colors='black', linestyles='solid', lw=1, alpha=0.8,zorder=-5)
         axx.legend()
     fig.tight_layout()
     if savepath:

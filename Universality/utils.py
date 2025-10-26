@@ -143,7 +143,7 @@ def calc_time_avs_ind_samples(data_arr, conv_list, Nexp=1, unc_multiplier = 1, d
                 pass
     return time_av, var_av, var_per_exp
 
-def calc_moments(data_arr, conv_list, center=None, norm_factor=None):
+def calc_moments(data_arr, conv_list, Nexp=1, center=None, norm_factor=None):
     """
     Calculate 1st–4th moments over the frame(s) and experiment dimensions
     for each act, allowing variable intermediate dimensions (e.g. partitions).
@@ -151,7 +151,7 @@ def calc_moments(data_arr, conv_list, center=None, norm_factor=None):
     Parameters
     ----------
     data_arr : np.ndarray
-        Array of shape (Nframes, ..., Nact, Nexp)
+        Array of shape (Nframes, ..., Nact, Nexp) or (Nframes, ..., Nact)
     conv_list : list[int]
         List of starting frame indices for each act.
     center : float, optional
@@ -165,15 +165,14 @@ def calc_moments(data_arr, conv_list, center=None, norm_factor=None):
         Array of shape (4, Nact)
     """
 
-    Nact = data_arr.shape[-2]
+    Nact = data_arr.shape[-2] if Nexp > 1 else data_arr.shape[-1]
     moments = np.zeros((4, Nact))
     
     normalization = norm_factor if norm_factor is not None else 1.0
     defects = data_arr / normalization
 
     for i in range(Nact):
-        data_slice = defects[conv_list[i]:, ..., i, :]
-        
+        data_slice = defects[conv_list[i]:, ..., i, :] if Nexp > 1 else defects[conv_list[i]:, ..., i]
         # Compute 1st–4th moments
         for j in range(4):
             moments[j, i]  = moment(data_slice,moment=j + 1, \
@@ -243,12 +242,12 @@ def extract_cid_results(info_dict, verbose=True):
     save_path = info_dict['save_path']
     output_suffix = info_dict['output_suffix']
     
-    LX = info_dict['LX']
     nexp = info_dict['nexp']
     act_exclude_list = info_dict['act_exclude_list']
 
     act_dir_list = glob.glob(os.path.join(base_path, '*'))
     act_list = [float(act_dir.split('_')[-1]) for act_dir in act_dir_list]
+    
     # exclude activities in act_exclude_list
     act_dir_list = [act_dir for i, act_dir in enumerate(act_dir_list) if act_list[i] not in act_exclude_list]
     act_list = [act for act in act_list if act not in act_exclude_list]
@@ -271,8 +270,8 @@ def extract_cid_results(info_dict, verbose=True):
     npartitions = cid_params['npartitions']
 
     cid_arr = np.nan * np.zeros((ncubes, npartitions, len(act_list), nexp, 2))
-    cid_shuffle_arr = np.nan * np.zeros((ncubes, npartitions, len(act_list), nexp, 2))
-    cid_frac_arr = np.nan * np.zeros((ncubes, npartitions, len(act_list), nexp, 2))
+    cid_shuffle_arr = np.nan * np.zeros_like(cid_arr)
+    cid_frac_arr = np.nan * np.zeros_like(cid_arr)
 
     for i, act_dir in enumerate(act_dir_list):
         exp_dir_list =  [x[0] for x in os.walk(act_dir)][1:]
@@ -287,13 +286,58 @@ def extract_cid_results(info_dict, verbose=True):
             cid_arr[-nframes:, :, i, j, :] = data_npz['cid']
             cid_shuffle_arr[-nframes:, :, i, j, :] = data_npz['cid_shuffle']
 
-    cid_frac_arr[:, :, :, :, 0] = cid_arr[:, :, :, :, 0] / cid_shuffle_arr[:, :, :, :, 0]
-    cid_frac_arr[:, :, :, :, 1] = cid_frac_arr[:, :, :, :, 0] * np.sqrt( (cid_arr[:, :, :, :, 1]/cid_arr[:, :, :, :, 0])**2 + (cid_shuffle_arr[:, :, :, :, 1]/cid_shuffle_arr[:, :, :, :, 0])**2 )
+    cid_frac_arr[..., 0] = cid_arr[..., 0] / cid_shuffle_arr[..., 0]
+    cid_frac_arr[..., 1] = cid_frac_arr[..., 0] * np.sqrt( (cid_arr[..., 1]/cid_arr[..., 0])**2 + (cid_shuffle_arr[..., 1]/cid_shuffle_arr[..., 0])**2 )
 
     # save cid_arr, cid_shuffle_arr, cid_frac_arr
     np.savez_compressed(os.path.join(save_path, f'cid_data{output_suffix}.npz'), cid=cid_arr, cid_shuffle=cid_shuffle_arr, cid_frac=cid_frac_arr, act_list=act_list)
     if verbose: print(f'cid data saved to {os.path.join(save_path, f"cid_data{output_suffix}.npz")}')
     return
+
+def extract_cid_results_single(info_dict, verbose=True):
+    """
+    Extracts CID results from several activity directories and compiles them into a single dataset.
+    """
+    
+    base_path = info_dict['base_path']
+    save_path = info_dict['save_path']
+    output_suffix = info_dict['output_suffix']
+    act_exclude_list = info_dict['act_exclude_list']
+
+    act_dir_list = glob.glob(os.path.join(base_path, '*'))
+    act_list = [float(act_dir.split('_')[-1]) for act_dir in act_dir_list]
+
+    # exclude activities in act_exclude_list
+    act_dir_list = [act_dir for i, act_dir in enumerate(act_dir_list) if act_list[i] not in act_exclude_list]
+    act_list = [act for act in act_list if act not in act_exclude_list]
+
+    with open(os.path.join(act_dir_list[0], f'cid_params{output_suffix}.pkl'), 'rb') as f:
+        cid_params = pkl.load(f)
+    with open(os.path.join(save_path, f'cid_params{output_suffix}.pkl'), 'wb') as f:
+        pkl.dump(cid_params, f)
+
+    ncubes = cid_params['ncubes']
+    npartitions = cid_params['npartitions']
+
+    cid_arr = np.nan * np.zeros((ncubes, npartitions, len(act_list), 2))
+    cid_shuffle_arr = np.nan * np.zeros_like(cid_arr)
+    cid_frac_arr = np.nan * np.zeros((ncubes, npartitions, len(act_list), 2))
+
+    for i, act_dir in enumerate(act_dir_list):
+        data_npz = np.load(os.path.join(act_dir, f'cid{output_suffix}.npz'), allow_pickle=True)
+        
+        nframes = data_npz['cid'].shape[0]
+        cid_arr[-nframes:, :, i, :] = data_npz['cid']
+        cid_shuffle_arr[-nframes:, :, i, :] = data_npz['cid_shuffle']
+
+    cid_frac_arr[..., 0] = cid_arr[..., 0] / cid_shuffle_arr[..., 0]
+    cid_frac_arr[..., 1] = cid_frac_arr[..., 0] * np.sqrt( (cid_arr[..., 1]/cid_arr[..., 0])**2 + (cid_shuffle_arr[..., 1]/cid_shuffle_arr[..., 0])**2 )
+
+    # save cid_arr, cid_shuffle_arr, cid_frac_arr
+    np.savez_compressed(os.path.join(save_path, f'cid_data{output_suffix}.npz'), cid=cid_arr, cid_shuffle=cid_shuffle_arr, cid_frac=cid_frac_arr, act_list=act_list)
+    if verbose: print(f'cid data saved to {os.path.join(save_path, f"cid_data{output_suffix}.npz")}')
+    return
+
 
 def get_allowed_time_intervals(system_size, nbits_max = 8):
     """

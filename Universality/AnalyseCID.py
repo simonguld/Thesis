@@ -2,6 +2,7 @@
 # Date (latest update): 
 
 ### SETUP ------------------------------------------------------------------------------------
+
 import os
 import pickle as pkl
 
@@ -20,7 +21,7 @@ class AnalyseCID:
     General-purpose class for managing CID data extraction and analysis.
     """
 
-    def __init__(self, params: dict):
+    def __init__(self, params: dict, load_data=True):
         """
         Parameters
         ----------
@@ -64,8 +65,6 @@ class AnalyseCID:
         self.base_paths = {LX: f'{self.base_path}{LX}{self.data_suffix}' for LX in self.L_list}
         self.save_paths = {LX: f'{self.save_path}{LX}{self.data_suffix}' for LX in self.L_list}
 
-        self.cid_params = self.__load_cid_params()
-        
         # --- Initialize data containers ---
         self.act = {}
         self.conv = {}
@@ -81,7 +80,9 @@ class AnalyseCID:
         self.dcid = {}
         self.dfrac = {}
 
-        self.__load_data()
+        if load_data:
+            self.cid_params = self.__load_cid_params()
+            self.__load_data()
 
     def __load_cid_params(self,):
         """Load CID parameters for each system size LX."""
@@ -122,6 +123,7 @@ class AnalyseCID:
             if cap_cid:
                 frac_mask = frac_arr[...,0] > 1
                 frac_arr[...,0][frac_mask] = 1.0
+                frac_arr[...,1][frac_mask] = 0.0
             self.frac[LX] = frac_arr  
         return
 
@@ -151,6 +153,7 @@ class AnalyseCID:
     
     def __load_data(self,):
         """Load CID data for each system size LX."""
+        self.cid_params = self.__load_cid_params()
         self.__load_data_full()
         try:
             self.__load_data_processed()
@@ -160,23 +163,25 @@ class AnalyseCID:
         return
     
     def get_moments(self):
-        """Calculate moments of CID and divergence for each system size LX.
+        """
+        Calculate first 4 moments of CID and divergence for each system size LX.
 
-        Returns
+        Returns:
         -------
         moment_dict : dict
-            Dictionary mapping system size to CID moments.
+            Dictionary mapping system size to CID moments. Shape (4, num_activities).
             div_moment_dict : dict
-            Dictionary mapping system size to divergence moments."""
+            Dictionary mapping system size to divergence moments. Shape (4, num_activities).
+        """
         
         moment_dict = {}
         div_moment_dict = {}
         for LX in self.L_list:
-            moment_dict[LX] = calc_moments(self.cid[LX][...,0], self.conv[LX],)
-            div_moment_dict[LX] = calc_moments(1 - self.frac[LX][...,0], self.conv[LX],)     
+            moment_dict[LX] = calc_moments(self.cid[LX][...,0], Nexp=self.Nexp[LX], conv_list=self.conv[LX])
+            div_moment_dict[LX] = calc_moments(1 - self.frac[LX][...,0], Nexp=self.Nexp[LX], conv_list=self.conv[LX])
         return moment_dict, div_moment_dict
 
-    def extract(self, extractor_func=extract_cid_results, reload=False):
+    def extract(self, extractor_func=None, conv_list_dir=None, reload=True):
         """Extract CID data for each system size LX.
         
         Parameters
@@ -186,10 +191,16 @@ class AnalyseCID:
         reload : bool
             Whether to reload data from disk or use cached data. Defaults to True.
         """
-  
+        
         for LX in self.L_list:
             base_path = self.base_paths[LX]
             save_path = self.save_paths[LX]
+            os.makedirs(save_path, exist_ok=True)
+
+            if extractor_func is None:
+                extractor_function = extract_cid_results if self.Nexp[LX] > 1 else extract_cid_results_single
+            else:
+                extractor_function = extractor_func
 
             info_dict = {"base_path": base_path,
                         "save_path": save_path,
@@ -200,8 +211,13 @@ class AnalyseCID:
 
             if self.verbose: print(f"[Extract] LX={LX} | data_path={base_path}")
 
-            conv_list = np.load(os.path.join(save_path, "conv_list.npy"), allow_pickle=True)
-            extractor_func(info_dict, verbose=self.verbose)
+            # Run extractor function
+            extractor_function(info_dict, verbose=self.verbose)
+
+            # Convert conv_list to cubes format
+            conv_list = np.load(os.path.join(save_path if conv_list_dir is None else conv_list_dir, "conv_list.npy"), allow_pickle=True)
+            if not os.path.exists(os.path.join(save_path, "conv_list.npy")):
+                np.save(os.path.join(save_path, "conv_list.npy"), conv_list)
             gen_conv_list(conv_list, self.output_suffix, save_path)
    
         if reload: self.__load_data_full()
@@ -210,6 +226,8 @@ class AnalyseCID:
     def analyze(self,):
         """Analyze CID data to compute time averages and variances."""
         
+        # Load unprocessed data if not already loaded
+        self.__load_data_full()
         multiplier = self.uncertainty_multiplier
         ddof = self.ddof
 
@@ -228,15 +246,10 @@ class AnalyseCID:
                                                 conv, Nexp=Nexp, unc_multiplier=multiplier, ddof=ddof)
 
             # calculate derivatives
-            cid_deriv = np.nan * np.ones_like(cid_tav)[:-1]
-            frac_deriv = np.nan * np.ones_like(cid_frac_tav)[:-1]
-
             dcid, dcid_err = calc_derivative(act, cid_tav[:,0], cid_tav[:,1])[1:]
             dfrac, dfrac_err = calc_derivative(act, cid_frac_tav[:,0], cid_frac_tav[:,1])[1:]
-            cid_deriv[:,0] = dcid
-            cid_deriv[:,1] = dcid_err
-            frac_deriv[:,0] = dfrac
-            frac_deriv[:,1] = dfrac_err
+            cid_deriv = np.stack((dcid, dcid_err), axis=1)
+            frac_deriv = np.stack((dfrac, dfrac_err), axis=1)
 
             np.savez_compressed(
                 os.path.join(save_path, f"cid_time_av{self.output_suffix}.npz"),
@@ -256,27 +269,27 @@ class AnalyseCID:
         self.__load_data_processed()
         return
 
-    def run(self, extractor_func=extract_cid_results):
+    def run(self, extractor_func=None, conv_list_dir=None):
         """Convenience method to run extraction + analysis."""
         if self.verbose:
             print("=== Starting CID analysis ===")
-        self.extract(extractor_func=extractor_func,reload=True)
+        self.extract(extractor_func=extractor_func,reload=True, conv_list_dir=conv_list_dir)
         self.analyze()
-        if verbose:
-            print("=== Analysis complete ===")
         if self.verbose:
             print("=== Extraction & Analysis complete ===")
+        return
 
     def plot_cid_and_deriv(self, L_list=None,xlims=None, plot_abs=False, save_path=None):
         """Plot CID and its derivative with respect to activity."""
         save_path = save_path if save_path is not None else self.figs_save_path
+
         fig, ax = plot_cid_and_derivative(
                     L_list=L_list if L_list is not None else self.L_list, 
                     act_dict=self.act, 
                     cid_time_av_dict=self.cid_tav, 
                     dcid_dict=self.dcid, 
                     xlims=xlims, plot_abs=plot_abs, 
-                    savepath=os.path.join(save_path, 'cid_dcid.pdf'))
+                    savepath=os.path.join(save_path, 'cid_dcid.pdf') if save_path is not None else None)
         return fig, ax
 
     def plot_div_and_deriv(self, L_list=None, xlims=None, plot_abs=False, save_path=None):
@@ -289,7 +302,7 @@ class AnalyseCID:
                     dfrac_dict=self.dfrac, 
                     xlims=xlims, 
                     plot_abs=plot_abs, 
-                    savepath=os.path.join(save_path, 'div_ddiv.pdf'))
+                    savepath=os.path.join(save_path, 'div_ddiv.pdf') if save_path is not None else None)
         return fig, ax
     
     def plot_cid_fluc(self, L_list=None, xlims=None, plot_abs=False, save_path=None):
@@ -302,7 +315,8 @@ class AnalyseCID:
             cid_var_dict=self.cid_var, 
             dcid_dict=self.dcid, 
             xlims=xlims, plot_abs=plot_abs, 
-            savepath=os.path.join(save_path, 'cid_fluc.pdf'))
+            savepath=os.path.join(save_path, 'cid_fluc.pdf') if save_path is not None else None
+        )
         return fig, ax
 
     def plot_div_fluc(self, L_list=None, xlims=None, plot_div_per=True, plot_abs=False, save_path=None):
@@ -317,7 +331,8 @@ class AnalyseCID:
             xlims=xlims, 
             plot_div_per=plot_div_per,
             plot_abs=plot_abs,
-            savepath=os.path.join(save_path, 'div_fluc.pdf'))
+            savepath=os.path.join(save_path, 'div_fluc.pdf') if save_path is not None else None
+        )
         return fig, ax
 
     def plot_cid_moments(self, L_list=None, xlims=None, plot_binder=False, save_path=None):
@@ -331,7 +346,8 @@ class AnalyseCID:
             xlims=xlims,
             moment_label=r'CID', 
             plot_binder=plot_binder, 
-            savepath=os.path.join(save_path, f'cid_moments.pdf'))
+            savepath=os.path.join(save_path, f'cid_moments.pdf') if save_path is not None else None
+        )
         return fig, ax
 
     def plot_div_moments(self, L_list=None, xlims=None, plot_binder=False, save_path=None):
@@ -345,5 +361,6 @@ class AnalyseCID:
             xlims=xlims,
             moment_label=r'$\mathcal{D}$', 
             plot_binder=plot_binder, 
-            savepath=os.path.join(save_path, f'div_moments.pdf'))
+            savepath=os.path.join(save_path, f'div_moments.pdf') if save_path is not None else None
+        )
         return fig, ax
