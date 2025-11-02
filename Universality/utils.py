@@ -1,6 +1,5 @@
 # Author: Simon Guldager Andersen
 
-
 ## Imports:
 import os
 import pickle as pkl
@@ -14,9 +13,9 @@ from multiprocessing.pool import Pool as Pool
 
 import numpy as np
 from scipy.stats import moment
+from sympy import frac
 
-
-# Helper functions -------------------------------------------------------------------
+# Helper functions -----------------------------------------------------------------------
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -65,9 +64,9 @@ def block_flatten(array, m, k):
     # Flatten all blocks
     return reshaped.reshape(-1)
 
-# Statistics functions -------------------------------------------------------------------
+# Statistics functions --------------------------------------------------------------------
 
-def calc_derivative(xvals, yvals, yerrs):
+def calc_forward_derivative(xvals, yvals, yerrs):
     """
     Calculate the numerical derivative of yvals with respect to xvals,
     along with the propagated errors.
@@ -79,19 +78,44 @@ def calc_derivative(xvals, yvals, yerrs):
     yerrs : array-like
         The errors associated with the y-values.
     Returns:
-    x_diff_tot : array-like
         The midpoints of the x-values where the derivative is calculated.
-    deriv : array-like
-        The numerical derivative of yvals with respect to xvals.
-    deriv_err : array-like
-        The propagated errors of the derivative.
+    deriv : array-like 
+        The numerical derivative of yvals with respect to xvals and 
+    the propagated uncertainties.
     """
     frac_diff = np.diff(yvals) 
     x_diff = np.array(xvals[1:]) - np.array(xvals[:-1])
-    x_diff_tot = np.array(xvals[:-1]) + x_diff/2
+
     deriv = frac_diff / x_diff
     deriv_err = np.sqrt(yerrs[1:]**2 + yerrs[:-1]**2) / x_diff
-    return x_diff_tot, deriv, deriv_err
+    
+    return np.stack((deriv, deriv_err), axis=1)
+
+def calc_central_derivative(xvals, yvals, yerrs, ):
+    """
+    Calculate the tangent (derivative) of yvals with respect to xvals,
+    along with the propagated uncertainties. First and last points are calculated
+    using forward and backward differences, respectively. Middle points are calculated
+    using central differences.
+    """
+
+    dy = np.zeros((len(yvals), 2))
+    xdiff = np.diff(xvals)
+    ydiff = np.diff(yvals)
+
+    dy_forward = ydiff / xdiff
+    dy_err_forward = np.sqrt(yerrs[1:]**2 + yerrs[:-1]**2) / xdiff
+  
+    dy[0,0] = dy_forward[0]
+    dy[-1,0] = dy_forward[-1]
+    dy[1:-1,0] = (dy_forward[1:] + dy_forward[:-1]) / 2
+
+    dy[0,1] = dy_err_forward[0]
+    dy[-1,1]    = dy_err_forward[-1]
+    dy[1:-1,1] = np.sqrt(dy_err_forward[1:]**2 + dy_err_forward[:-1]**2) / 2
+
+    return dy
+
 
 def calc_time_av_ind_samples(data_arr, conv_list, unc_multiplier = 1, ddof = 1,):
     """
@@ -261,7 +285,6 @@ def extract_cid_results(info_dict, verbose=True):
                 cid_params = pkl.load(f)
             with open(os.path.join(save_path, f'cid_params{output_suffix}.pkl'), 'wb') as f:
                 pkl.dump(cid_params, f)
-
             break
         except:
             continue
@@ -269,9 +292,14 @@ def extract_cid_results(info_dict, verbose=True):
     ncubes = cid_params['ncubes']
     npartitions = cid_params['npartitions']
 
+    cid_all = False
+
     cid_arr = np.nan * np.zeros((ncubes, npartitions, len(act_list), nexp, 2))
     cid_shuffle_arr = np.nan * np.zeros_like(cid_arr)
     cid_frac_arr = np.nan * np.zeros_like(cid_arr)
+
+    cid_arr_minmax = np.nan * np.zeros((ncubes, npartitions, len(act_list), nexp, 3))
+    frac_arr_minmax = np.nan * np.zeros_like(cid_arr_minmax)
 
     for i, act_dir in enumerate(act_dir_list):
         exp_dir_list =  [x[0] for x in os.walk(act_dir)][1:]
@@ -285,12 +313,24 @@ def extract_cid_results(info_dict, verbose=True):
             nframes = data_npz['cid'].shape[0]
             cid_arr[-nframes:, :, i, j, :] = data_npz['cid']
             cid_shuffle_arr[-nframes:, :, i, j, :] = data_npz['cid_shuffle']
+            if 'cid_full' in data_npz.files:
+                cid_all = True
+                vals = data_npz['cid_full']
+                cid_arr_minmax[-nframes:, :, i, j, 0] = np.nanmin(vals, axis=-1)
+                cid_arr_minmax[-nframes:, :, i, j, 1] = cid_arr[-nframes:, :, i, j, 0]
+                cid_arr_minmax[-nframes:, :, i, j, 2] = np.nanmax(vals, axis=-1)
 
     cid_frac_arr[..., 0] = cid_arr[..., 0] / cid_shuffle_arr[..., 0]
     cid_frac_arr[..., 1] = cid_frac_arr[..., 0] * np.sqrt( (cid_arr[..., 1]/cid_arr[..., 0])**2 + (cid_shuffle_arr[..., 1]/cid_shuffle_arr[..., 0])**2 )
+    if cid_all:
+        frac_arr_minmax = cid_arr_minmax / cid_shuffle_arr[..., 0, None]
 
-    # save cid_arr, cid_shuffle_arr, cid_frac_arr
-    np.savez_compressed(os.path.join(save_path, f'cid_data{output_suffix}.npz'), cid=cid_arr, cid_shuffle=cid_shuffle_arr, cid_frac=cid_frac_arr, act_list=act_list)
+        np.savez_compressed(os.path.join(save_path, f'cid_data{output_suffix}.npz'), \
+                            cid=cid_arr, cid_shuffle=cid_shuffle_arr, \
+                            cid_frac=cid_frac_arr, act_list=act_list, 
+                            cid_minmax=cid_arr_minmax, frac_minmax=frac_arr_minmax)
+    else:
+        np.savez_compressed(os.path.join(save_path, f'cid_data{output_suffix}.npz'), cid=cid_arr, cid_shuffle=cid_shuffle_arr, cid_frac=cid_frac_arr, act_list=act_list)
     if verbose: print(f'cid data saved to {os.path.join(save_path, f"cid_data{output_suffix}.npz")}')
     return
 
@@ -337,7 +377,6 @@ def extract_cid_results_single(info_dict, verbose=True):
     np.savez_compressed(os.path.join(save_path, f'cid_data{output_suffix}.npz'), cid=cid_arr, cid_shuffle=cid_shuffle_arr, cid_frac=cid_frac_arr, act_list=act_list)
     if verbose: print(f'cid data saved to {os.path.join(save_path, f"cid_data{output_suffix}.npz")}')
     return
-
 
 def get_allowed_time_intervals(system_size, nbits_max = 8):
     """

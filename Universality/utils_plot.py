@@ -7,7 +7,7 @@ from sympy import div
 
 # CID plotting functions -------------------------------------------------------------------
 
-def plot_moments(moment_dict, act_dict, L_list, moment_label, xlims=None, plot_binder=False, savepath=None):
+def plot_moments(moment_dict, act_dict, L_list, moment_label, act_critical=None, xlims=None, plot_binder=False, savepath=None):
     """Plot moments of CID vs activity for different system sizes."""
     
     fig, ax = plt.subplots(ncols=4, figsize=(16, 4))
@@ -35,15 +35,19 @@ def plot_moments(moment_dict, act_dict, L_list, moment_label, xlims=None, plot_b
     for axx in ax:
         axx.set(xlabel=r'Activity ($\tilde{\zeta}$)')
         xlim = axx.get_xlim() if xlims is None else xlims
+        ylim = axx.get_ylim()
         axx.set_xlim(xlim)
-        axx.set_ylim(axx.get_ylim())
+        axx.set_ylim(ylim)
+        axx.hlines(0, xlim[0], xlim[1], colors='black', linestyles='solid', lw=1, alpha=0.8,zorder=-5)
+        if act_critical is not None:
+            axx.vlines(act_critical, ylim[0], ylim[1], color='k', linestyle='--', zorder=-5, lw=1)
     if savepath:
         fig.savefig(savepath, bbox_inches='tight', dpi=620, pad_inches=.05)
         print(f"Figure saved to: {savepath}")
     return fig, ax
 
 def plot_cid_and_derivative(L_list, act_dict, cid_time_av_dict, \
-                            dcid_dict, xlims=None, plot_abs=False, savepath=None):
+                            dcid_dict, act_critical=None, xlims=None, plot_abs=False, shift_act=False, savepath=None):
     """
     Plot CID and its derivative vs activity for different system sizes.
 
@@ -79,9 +83,11 @@ def plot_cid_and_derivative(L_list, act_dict, cid_time_av_dict, \
 
     for i, LX in enumerate(L_list):
         act_list = act_dict[LX]
-        act_diff_tot = act_list[:-1] + np.diff(act_list) / 2
+
         cid_time_av = cid_time_av_dict[LX].copy()
         deriv_cid = dcid_dict[LX].copy()
+        Nderiv = deriv_cid.shape[0]
+        act_diff_tot = act_list[:-1] + np.diff(act_list) / 2 if shift_act else act_list[:Nderiv]
         if plot_abs:
             deriv_cid[:, 0] = np.abs(deriv_cid[:, 0])
 
@@ -97,9 +103,12 @@ def plot_cid_and_derivative(L_list, act_dict, cid_time_av_dict, \
     for ax in ax0:
         ax.set(xlabel=r'Activity ($\tilde{\zeta}$)')
         xlim = ax.get_xlim() if xlims is None else xlims
+        ylim = ax.get_ylim()
         ax.set_xlim(xlim)
-        ax.set_ylim(ax.get_ylim())
+        ax.set_ylim(ylim)
         ax.hlines(0, xlim[0], xlim[1], colors='black', linestyles='solid', lw=1, alpha=0.8,zorder=-5)
+        if act_critical is not None:
+            ax.vlines(act_critical, ylim[0], ylim[1], color='k', linestyle='--', zorder=-5, lw=1)
 
     if plot_abs:
         dy_label = r'$\vert d\textrm{CID}/d \tilde{\zeta} \vert$'
@@ -118,7 +127,7 @@ def plot_cid_and_derivative(L_list, act_dict, cid_time_av_dict, \
     return fig, ax0
 
 def plot_div_and_derivative(L_list, act_dict, frac_time_av_dict, \
-                        dfrac_dict, xlims=None, plot_abs=False, savepath=None):
+                        dfrac_dict, act_critical=None, xlims=None, plot_abs=False, shift_act=False, savepath=None):
     """
     Plot Divergence and its derivative vs activity for different system sizes
     
@@ -149,9 +158,11 @@ def plot_div_and_derivative(L_list, act_dict, frac_time_av_dict, \
 
     for i, LX in enumerate(L_list):
         act_list = act_dict[LX]
-        act_diff_tot = act_list[:-1] + np.diff(act_list) / 2
+
         div_time_av = frac_time_av_dict[LX].copy()
         deriv_div = dfrac_dict[LX].copy()
+        Nderiv = deriv_div.shape[0]
+        act_diff_tot = act_list[:-1] + np.diff(act_list) / 2 if shift_act else act_list[:Nderiv]
 
         # Convert CID/CID_shuffle to Divergence
         div_time_av[:, 0] = 1 - div_time_av[:, 0]
@@ -171,9 +182,12 @@ def plot_div_and_derivative(L_list, act_dict, frac_time_av_dict, \
     for ax in ax0:
         ax.set(xlabel=r'Activity ($\tilde{\zeta}$)')
         xlim = ax.get_xlim() if xlims is None else xlims
+        ylim = ax.get_ylim()
         ax.set_xlim(xlim)
-        ax.set_ylim(ax.get_ylim())
+        ax.set_ylim(ylim)
         ax.hlines(0, xlim[0], xlim[1], colors='black', linestyles='solid', lw=1, alpha=0.8,zorder=-5)
+        if act_critical is not None:
+            ax.vlines(act_critical, ylim[0], ylim[1], color='k', linestyle='--', zorder=-5, lw=1)
     if plot_abs:
         dy_label = r'$\vert d\mathcal{D}/d \tilde{\zeta} \vert$'
     else:
@@ -188,7 +202,7 @@ def plot_div_and_derivative(L_list, act_dict, frac_time_av_dict, \
     return fig, ax0
 
 def plot_cid_fluctuations(L_list, act_dict, cid_time_av_dict, cid_var_dict, dcid_dict, \
-                            xlims=None, plot_abs=False, savepath=None):
+                            act_critical=None, xlims=None, plot_abs=False, shift_act=False, savepath=None):
     """
     Plot CID variance and derivative vs activity for different system sizes.
 
@@ -238,14 +252,17 @@ def plot_cid_fluctuations(L_list, act_dict, cid_time_av_dict, cid_var_dict, dcid
         ax = ax0 if ncols == 1 else ax0[i]
 
         act_list = act_dict[LX]
-        act_diff_tot = act_list[:-1] + np.diff(act_list) / 2
+        
         cid_tav = cid_time_av_dict[LX].copy()
         cid_var = cid_var_dict[LX].copy()
         deriv_cid = dcid_dict[LX].copy()
+        Nderiv = deriv_cid.shape[0]
+
+        act_diff_tot = act_list[:-1] + np.diff(act_list) / 2 if shift_act else act_list[:Nderiv]
         if plot_abs:
             deriv_cid = np.abs(deriv_cid)
 
-        normalizer = 0.5 * (cid_tav[:-1, 0] + cid_tav[1:, 0])
+        normalizer = 0.5 * (cid_tav[:Nderiv, 0] + cid_tav[-Nderiv:, 0])
         deriv_cid_per = deriv_cid / normalizer[:, None]
 
         # normalize by magnitude
@@ -278,9 +295,12 @@ def plot_cid_fluctuations(L_list, act_dict, cid_time_av_dict, cid_var_dict, dcid
     for axx in ax:
         axx.set(xlabel=r'Activity ($\tilde{\zeta}$)')
         xlim = axx.get_xlim() if xlims is None else xlims
+        ylim = axx.get_ylim()
         axx.set_xlim(xlim)
         axx.set_ylim(axx.get_ylim())
         axx.hlines(0, xlim[0], xlim[1], colors='black', linestyles='solid', lw=1, alpha=0.8,zorder=-5)
+        if act_critical is not None:
+            axx.vlines(act_critical, ylim[0], ylim[1], color='k', linestyle='--', zorder=-5, lw=1)
         axx.legend()
 
     fig.tight_layout()
@@ -290,8 +310,8 @@ def plot_cid_fluctuations(L_list, act_dict, cid_time_av_dict, cid_var_dict, dcid
         print(f"Figure saved to: {savepath}")
     return fig, ax
 
-def plot_div_fluctuations(L_list, act_dict, frac_time_av_dict, dfrac_dict, div_var_dict,
-                        xlims=None, plot_div_per=False, plot_abs=False, savepath=None):
+def plot_div_fluctuations(L_list, act_dict, frac_time_av_dict, dfrac_dict, div_var_dict, act_critical=None,
+                        xlims=None, plot_div_per=False, plot_abs=False, shift_act=False, savepath=None):
     """
     Plot divergence variance and derivative vs activity for different system sizes. 
 
@@ -338,11 +358,13 @@ def plot_div_fluctuations(L_list, act_dict, frac_time_av_dict, dfrac_dict, div_v
         ax = ax0 if ncols == 1 else ax0[i]
 
         act_list = act_dict[LX]
-        act_diff_tot = act_list[:-1] + np.diff(act_list) / 2
-        
+
         div_var = div_var_dict[LX].copy()
         deriv_div = dfrac_dict[LX].copy()
         div_tav = frac_time_av_dict[LX].copy()
+        Nderiv = deriv_div.shape[0]
+
+        act_diff_tot = act_list[:-1] + np.diff(act_list) / 2 if shift_act else act_list[:Nderiv]
 
         # Convert CID/CID_shuffle to Divergence
         div_tav[:, 0] = 1 - div_tav[:, 0]
@@ -350,7 +372,7 @@ def plot_div_fluctuations(L_list, act_dict, frac_time_av_dict, dfrac_dict, div_v
         if plot_abs:
             deriv_div = np.abs(deriv_div)
 
-        normalizer = 0.5 * (div_tav[:-1, 0] + div_tav[1:, 0])
+        normalizer = 0.5 * (div_tav[:Nderiv, 0] + div_tav[-Nderiv:, 0])
         deriv_div_per = deriv_div / normalizer[:, None]
 
         # normalize by magnitude
@@ -385,9 +407,12 @@ def plot_div_fluctuations(L_list, act_dict, frac_time_av_dict, dfrac_dict, div_v
     for axx in ax:
         axx.set(xlabel=r'Activity ($\tilde{\zeta}$)')
         xlim = axx.get_xlim() if xlims is None else xlims
+        ylim = axx.get_ylim()
         axx.set_xlim(xlim)
-        axx.set_ylim(axx.get_ylim())
+        axx.set_ylim(ylim)
         axx.hlines(0, xlim[0], xlim[1], colors='black', linestyles='solid', lw=1, alpha=0.8,zorder=-5)
+        if act_critical is not None:
+            axx.vlines(act_critical, ylim[0], ylim[1], color='k', linestyle='--', zorder=-5, lw=1)
         axx.legend()
     fig.tight_layout()
     if savepath:

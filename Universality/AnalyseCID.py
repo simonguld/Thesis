@@ -223,9 +223,11 @@ class AnalyseCID:
         if reload: self.__load_data_full()
         return
 
-    def analyze(self,):
+    def analyze(self, use_central_diff=True):
         """Analyze CID data to compute time averages and variances."""
         
+        func_deriv = calc_central_derivative if use_central_diff else calc_forward_derivative
+
         # Load unprocessed data if not already loaded
         self.__load_data_full()
         multiplier = self.uncertainty_multiplier
@@ -246,10 +248,8 @@ class AnalyseCID:
                                                 conv, Nexp=Nexp, unc_multiplier=multiplier, ddof=ddof)
 
             # calculate derivatives
-            dcid, dcid_err = calc_derivative(act, cid_tav[:,0], cid_tav[:,1])[1:]
-            dfrac, dfrac_err = calc_derivative(act, cid_frac_tav[:,0], cid_frac_tav[:,1])[1:]
-            cid_deriv = np.stack((dcid, dcid_err), axis=1)
-            frac_deriv = np.stack((dfrac, dfrac_err), axis=1)
+            cid_deriv = func_deriv(act, cid_tav[:,0], cid_tav[:,1])
+            frac_deriv = func_deriv(act, cid_frac_tav[:,0], cid_frac_tav[:,1])
 
             np.savez_compressed(
                 os.path.join(save_path, f"cid_time_av{self.output_suffix}.npz"),
@@ -279,7 +279,7 @@ class AnalyseCID:
             print("=== Extraction & Analysis complete ===")
         return
 
-    def plot_cid_and_deriv(self, L_list=None,xlims=None, plot_abs=False, save_path=None):
+    def plot_cid_and_deriv(self, L_list=None, act_critical=None, xlims=None, plot_abs=False, save_path=None):
         """Plot CID and its derivative with respect to activity."""
         save_path = save_path if save_path is not None else self.figs_save_path
 
@@ -288,24 +288,27 @@ class AnalyseCID:
                     act_dict=self.act, 
                     cid_time_av_dict=self.cid_tav, 
                     dcid_dict=self.dcid, 
-                    xlims=xlims, plot_abs=plot_abs, 
+                    act_critical=act_critical,
+                    xlims=xlims, 
+                    plot_abs=plot_abs, 
                     savepath=os.path.join(save_path, 'cid_dcid.pdf') if save_path is not None else None)
         return fig, ax
 
-    def plot_div_and_deriv(self, L_list=None, xlims=None, plot_abs=False, save_path=None):
+    def plot_div_and_deriv(self, L_list=None, act_critical=None, xlims=None, plot_abs=False, save_path=None):
         """Plot divergence and its derivative with respect to activity."""
         save_path = save_path if save_path is not None else self.figs_save_path
         fig, ax = plot_div_and_derivative(
                     L_list=L_list if L_list is not None else self.L_list, 
                     act_dict=self.act, 
                     frac_time_av_dict=self.frac_tav, 
-                    dfrac_dict=self.dfrac, 
+                    dfrac_dict=self.dfrac,
+                    act_critical=act_critical, 
                     xlims=xlims, 
                     plot_abs=plot_abs, 
                     savepath=os.path.join(save_path, 'div_ddiv.pdf') if save_path is not None else None)
         return fig, ax
     
-    def plot_cid_fluc(self, L_list=None, xlims=None, plot_abs=False, save_path=None):
+    def plot_cid_fluc(self, L_list=None, act_critical=None, xlims=None, plot_abs=False, save_path=None):
         """Plot CID fluctuations and their derivative with respect to activity."""
         save_path = save_path if save_path is not None else self.figs_save_path
         fig, ax = plot_cid_fluctuations(
@@ -314,12 +317,13 @@ class AnalyseCID:
             cid_time_av_dict=self.cid_tav, 
             cid_var_dict=self.cid_var, 
             dcid_dict=self.dcid, 
+            act_critical=act_critical,
             xlims=xlims, plot_abs=plot_abs, 
             savepath=os.path.join(save_path, 'cid_fluc.pdf') if save_path is not None else None
         )
         return fig, ax
 
-    def plot_div_fluc(self, L_list=None, xlims=None, plot_div_per=True, plot_abs=False, save_path=None):
+    def plot_div_fluc(self, L_list=None, act_critical=None, xlims=None, plot_div_per=True, plot_abs=False, save_path=None):
         """Plot divergence fluctuations and their derivative with respect to activity."""
         save_path = save_path if save_path is not None else self.figs_save_path
         fig, ax = plot_div_fluctuations(
@@ -328,6 +332,7 @@ class AnalyseCID:
             frac_time_av_dict=self.frac_tav, 
             dfrac_dict=self.dfrac,
             div_var_dict=self.frac_var,
+            act_critical=act_critical,
             xlims=xlims, 
             plot_div_per=plot_div_per,
             plot_abs=plot_abs,
@@ -335,7 +340,7 @@ class AnalyseCID:
         )
         return fig, ax
 
-    def plot_cid_moments(self, L_list=None, xlims=None, plot_binder=False, save_path=None):
+    def plot_cid_moments(self, L_list=None, act_critical=None, xlims=None, plot_binder=False, save_path=None):
         """Plot moments of CID and divergence."""
         save_path = save_path if save_path is not None else self.figs_save_path
         moment_dict, _ = self.get_moments()
@@ -343,6 +348,7 @@ class AnalyseCID:
             moment_dict, 
             act_dict=self.act, 
             L_list=L_list if L_list is not None else self.L_list,
+            act_critical=act_critical,
             xlims=xlims,
             moment_label=r'CID', 
             plot_binder=plot_binder, 
@@ -350,7 +356,7 @@ class AnalyseCID:
         )
         return fig, ax
 
-    def plot_div_moments(self, L_list=None, xlims=None, plot_binder=False, save_path=None):
+    def plot_div_moments(self, L_list=None, act_critical=None, xlims=None, plot_binder=False, save_path=None):
         """Plot moments of divergence."""
         save_path = save_path if save_path is not None else self.figs_save_path
         _, div_moment_dict = self.get_moments()
@@ -358,6 +364,7 @@ class AnalyseCID:
             div_moment_dict, 
             act_dict=self.act, 
             L_list=L_list if L_list is not None else self.L_list,
+            act_critical=act_critical,
             xlims=xlims,
             moment_label=r'$\mathcal{D}$', 
             plot_binder=plot_binder, 

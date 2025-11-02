@@ -56,22 +56,26 @@ def main():
         'L_list': [512],
         'Nexp_list': [10],
         'act_exclude_dict': {512: []},
-        'xlims': None
+        'xlims': None,
+        'act_critical': 0.022
     }
     na_data_dict = {
         'data_suffix': '',
         'L_list': [512, 1024, 2048],
         'Nexp_list': [5]*3,
         'act_exclude_dict': {512: [0.02, 0.0225], 1024: [], 2048: [0.0225]},
-        'xlims': (0.016, 0.045)
+        'xlims': (0.016, 0.045),
+        'act_critical': 0.022
     }
     ndg_data_dict = {
         'data_suffix': 'ndg',
         'L_list': [1024],
         'Nexp_list': [1],
         'act_exclude_dict': {1024: []},
-        'xlims': None
+        'xlims': None,
+        'act_critical': 0.65
     }
+
     data_dict = {'sd': sd_data_dict, 'ndg': ndg_data_dict, '': na_data_dict}
     fig_folder_dict = {'sd': 'sd', 'ndg': 'ndg', '': 'na'}
 
@@ -108,22 +112,28 @@ def main():
             ac.analyze()
 
         if plot:
+            plot_abs = False
+            act_critical = cid_dict['act_critical']
+            if nbits == 7 and data_suffix == '':
+                L_list = [1024, 2048]
+            else:
+                L_list = ac.L_list
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=RuntimeWarning)
-                plot_abs = False
+                
                 ## Plot cid/div and its derivative with respect to activity
-                ac.plot_cid_and_deriv(save_path=ac.figs_save_path, xlims=xlims, plot_abs=plot_abs)
-                ac.plot_div_and_deriv(save_path=ac.figs_save_path, xlims=xlims, plot_abs=plot_abs)
+                ac.plot_cid_and_deriv(L_list=L_list, save_path=ac.figs_save_path, act_critical=act_critical, xlims=xlims, plot_abs=True)
+                ac.plot_div_and_deriv(L_list=L_list, save_path=ac.figs_save_path, act_critical=act_critical, xlims=xlims, plot_abs=False)
                 plt.close('all')
 
                 ## Plot moments
-                ac.plot_cid_moments(L_list=ac.L_list, save_path=ac.figs_save_path, xlims=xlims,)
-                ac.plot_div_moments(L_list=ac.L_list, save_path=ac.figs_save_path, xlims=xlims,)
+                ac.plot_cid_moments(L_list=L_list, save_path=ac.figs_save_path, xlims=xlims, act_critical=act_critical)
+                ac.plot_div_moments(L_list=L_list, save_path=ac.figs_save_path, xlims=xlims, act_critical=act_critical)
                 plt.close('all')
 
                 ## Plot fluctuations
-                ac.plot_cid_fluc(save_path=ac.figs_save_path, xlims=xlims, plot_abs=plot_abs)          
-                ac.plot_div_fluc(save_path=ac.figs_save_path, xlims=xlims, plot_abs=plot_abs, plot_div_per=False)
+                ac.plot_cid_fluc(L_list=L_list, save_path=ac.figs_save_path, act_critical=act_critical, xlims=xlims, plot_abs=True)
+                ac.plot_div_fluc(L_list=L_list, save_path=ac.figs_save_path, act_critical=act_critical, xlims=xlims, plot_abs=False, plot_div_per=False)
                 plt.close('all')
     
 if __name__ == '__main__':
