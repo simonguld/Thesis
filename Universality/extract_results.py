@@ -73,7 +73,7 @@ def main():
         'Nexp_list': [1],
         'act_exclude_dict': {1024: []},
         'xlims': None,
-        'act_critical': 0.65
+        'act_critical': 6.5
     }
 
     data_dict = {'sd': sd_data_dict, 'ndg': ndg_data_dict, '': na_data_dict}
