@@ -17,7 +17,7 @@ class CID(ComputableInformationDensity):
         if verbose:
             print(f"Using {self.ncpus} workers for CID calculations")
 
-    def itter_hscan(self, data):
+    def itter_hscan2(self, data):
         """ yields all 8 distinct Hilbert scanned views of the data. 
         Since a view is returned, this operation is O(1). """
         for k in self.hamiltonian_cycle:
@@ -26,9 +26,19 @@ class CID(ComputableInformationDensity):
             if k == 1: hcurve[1] = (self.size - 1) - hcurve[1]
             if k == 2: hcurve[[0,1]] = hcurve[[1,0]]
             yield self.hscan(data, hcurve)  # view of data, i.e. O(1)
-    
+
+    def itter_hscan(self, data):
+        """Yield Hilbert scanned views using precomputed hcurves (no recomputation)."""
+        for hcurve in self.hcurves:
+            yield self.hscan(data, hcurve)
+        
     def __call__(self, data):
         cid_av, cid_std, cid_shuffle = super().__call__(data, n_workers=self.ncpus)
+        cid_sem = cid_std / np.sqrt(self.length)
+        return cid_av, cid_sem, cid_shuffle
+    
+    def __call2__(self, data):
+        cid_av, cid_std, cid_shuffle = super().__call2__(data, n_workers=self.ncpus)
         cid_sem = cid_std / np.sqrt(self.length)
         return cid_av, cid_sem, cid_shuffle
 
