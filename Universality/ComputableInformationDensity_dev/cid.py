@@ -5,7 +5,6 @@ import numpy as np
 from .cid_abc import ComputableInformationDensity, ComputableInformationDensity_old
 from .hilbert_curve import hilbert_curve, precompute_hcurves, precompute_zcurves
 
-
 class CID(ComputableInformationDensity):
     def __init__(self, dim, nshuff, nbits=None, data_shape=None,
                 ordering='hilbert', mode='lz77', verbose=False):
@@ -40,8 +39,7 @@ class CID(ComputableInformationDensity):
         self.curves = precompute_hcurves(
             self.hamiltonian_cycle,
             self.principal_hcurve,
-            self.nbits
-        )
+            self.nbits)
 
     def __init_zcurve(self, dim, data_shape):
         if data_shape is None:
@@ -78,7 +76,6 @@ class CID(ComputableInformationDensity):
         cid_sem = cid_std / np.sqrt(self.length)
         return cid_av, cid_sem, cid_shuffle, cid_vals
 
-
 class CID_old(ComputableInformationDensity_old):
     
     hamiltonian_cycle = [0, 1, 0, 2, 1, 0, 1, 2]
@@ -101,7 +98,6 @@ class CID_old(ComputableInformationDensity_old):
         cid_av, cid_std, cid_shuffle = super().__call2__(data, n_workers=self.ncpus)
         cid_sem = cid_std / np.sqrt(self.length)
         return cid_av, cid_sem, cid_shuffle
-
 
 
 def cid2d(nshuff, nbits=None, data_shape=None, ordering='hilbert',mode='lz77', verbose=False):

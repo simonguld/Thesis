@@ -86,24 +86,24 @@ def itter_hscan_gen(data_arr, dim, nbits):
         yield data[tuple( hcurve )].T.ravel()  # view of data, i.e. O(1)
 
 def precompute_hcurves_standalone(dim, nbits):
-        """Precompute all hcurve coordinate variants exactly once."""
-        hamiltonian_cycle = [0, 1, 0, 2, 1, 0, 1, 2]
-        principal_curve = hilbert_curve(dim, nbits)
-        size = 1 << nbits  # 2**nbits
-        hcurves = []
+    """Precompute all hcurve coordinate variants exactly once."""
+    hamiltonian_cycle = [0, 1, 0, 2, 1, 0, 1, 2]
+    principal_curve = hilbert_curve(dim, nbits)
+    size = 1 << nbits  # 2**nbits
+    hcurves = []
 
-        idx_arr = np.arange((1 << nbits) ** dim).reshape( (1 << nbits, ) * dim )
-        h = principal_curve.copy()
+    idx_arr = np.arange((1 << nbits) ** dim).reshape( (1 << nbits, ) * dim )
+    h = principal_curve.copy()
 
-        for k in hamiltonian_cycle:
-            if k == 0:
-                h[0] = (size - 1) - h[0]
-            if k == 1:
-                h[1] = (size - 1) - h[1]
-            if k == 2:
-                h[[0, 1]] = h[[1, 0]]
-            hcurves.append(idx_arr[tuple( h )].T.ravel())
-        return hcurves
+    for k in hamiltonian_cycle:
+        if k == 0:
+            h[0] = (size - 1) - h[0]
+        if k == 1:
+            h[1] = (size - 1) - h[1]
+        if k == 2:
+            h[[0, 1]] = h[[1, 0]]
+        hcurves.append(idx_arr[tuple( h )].T.ravel())
+    return hcurves
 
 def precompute_hcurves(hamiltonian_cycle, principal_curve, nbits):
     """Precompute all hcurve coordinate variants exactly once."""
