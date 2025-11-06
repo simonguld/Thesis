@@ -359,9 +359,13 @@ def extract_cid_results_single(info_dict, verbose=True):
     ncubes = cid_params['ncubes']
     npartitions = cid_params['npartitions']
 
+    cid_all = False
+
     cid_arr = np.nan * np.zeros((ncubes, npartitions, len(act_list), 2))
     cid_shuffle_arr = np.nan * np.zeros_like(cid_arr)
     cid_frac_arr = np.nan * np.zeros((ncubes, npartitions, len(act_list), 2))
+    cid_arr_minmax = np.nan * np.zeros((ncubes, npartitions, len(act_list), 3))
+    frac_arr_minmax = np.nan * np.zeros_like(cid_arr_minmax)
 
     for i, act_dir in enumerate(act_dir_list):
         data_npz = np.load(os.path.join(act_dir, f'cid{output_suffix}.npz'), allow_pickle=True)
@@ -370,11 +374,28 @@ def extract_cid_results_single(info_dict, verbose=True):
         cid_arr[-nframes:, :, i, :] = data_npz['cid']
         cid_shuffle_arr[-nframes:, :, i, :] = data_npz['cid_shuffle']
 
+        if 'cid_full' in data_npz.files:
+            cid_all = True
+            vals = data_npz['cid_full']
+            cid_arr_minmax[-nframes:, :, i, 0] = np.nanmin(vals, axis=-1)
+            cid_arr_minmax[-nframes:, :, i, 1] = cid_arr[-nframes:, :, i, 0]
+            cid_arr_minmax[-nframes:, :, i, 2] = np.nanmax(vals, axis=-1)
+
     cid_frac_arr[..., 0] = cid_arr[..., 0] / cid_shuffle_arr[..., 0]
     cid_frac_arr[..., 1] = cid_frac_arr[..., 0] * np.sqrt( (cid_arr[..., 1]/cid_arr[..., 0])**2 + (cid_shuffle_arr[..., 1]/cid_shuffle_arr[..., 0])**2 )
 
-    # save cid_arr, cid_shuffle_arr, cid_frac_arr
-    np.savez_compressed(os.path.join(save_path, f'cid_data{output_suffix}.npz'), cid=cid_arr, cid_shuffle=cid_shuffle_arr, cid_frac=cid_frac_arr, act_list=act_list)
+    if cid_all:
+        frac_arr_minmax = cid_arr_minmax / cid_shuffle_arr[..., 0, None]
+
+        np.savez_compressed(os.path.join(save_path, f'cid_data{output_suffix}.npz'), \
+                            cid=cid_arr, cid_shuffle=cid_shuffle_arr, \
+                            cid_frac=cid_frac_arr, act_list=act_list, 
+                            cid_minmax=cid_arr_minmax, frac_minmax=frac_arr_minmax)
+    else:
+        np.savez_compressed(os.path.join(save_path, f'cid_data{output_suffix}.npz'), \
+                            cid=cid_arr, cid_shuffle=cid_shuffle_arr, \
+                            cid_frac=cid_frac_arr, act_list=act_list)
+
     if verbose: print(f'cid data saved to {os.path.join(save_path, f"cid_data{output_suffix}.npz")}')
     return
 
