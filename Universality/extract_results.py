@@ -138,9 +138,9 @@ def main():
                 #L_list = [1024]
                 
                 ## Plot cid/div and its derivative with respect to activity
-                ac.plot_cid_and_deriv(L_list=L_list, save_path=ac.figs_save_path, use_min=use_min, act_critical=act_critical, xlims=xlims, plot_abs=True)
+                #ac.plot_cid_and_deriv(L_list=L_list, save_path=ac.figs_save_path, use_min=use_min, act_critical=act_critical, xlims=xlims, plot_abs=True)
                 ac.plot_cid_and_deriv(L_list=L_list, save_path=ac.figs_save_path, use_min=use_min, act_critical=act_critical, xlims=xlims, plot_abs=False)
-                ac.plot_div_and_deriv(L_list=L_list, save_path=ac.figs_save_path, use_min=use_min,   act_critical=act_critical, xlims=xlims, plot_abs=True)
+                #ac.plot_div_and_deriv(L_list=L_list, save_path=ac.figs_save_path, use_min=use_min,   act_critical=act_critical, xlims=xlims, plot_abs=True)
                 ac.plot_div_and_deriv(L_list=L_list, save_path=ac.figs_save_path, use_min=use_min,   act_critical=act_critical, xlims=xlims, plot_abs=False)
                 plt.close('all')
 
