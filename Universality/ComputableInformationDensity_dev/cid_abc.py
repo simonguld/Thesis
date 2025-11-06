@@ -1,10 +1,12 @@
-from .computable_information_density import cid, cid78, cid_linear, cid_hybrid, cid_shuffle
-from .hilbert_curve import hilbert_curve, precompute_hcurves
+
+import time
 from abc import ABC, abstractmethod
 from multiprocessing import Pool
-import numpy as np
-import time
 
+import numpy as np
+
+from .computable_information_density import cid, cid78, cid_linear, cid_hybrid, cid_shuffle
+from .hilbert_curve import hilbert_curve, precompute_hcurves
 
 class ComputableInformationDensity(ABC):
 

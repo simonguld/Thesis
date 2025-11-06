@@ -2,6 +2,7 @@ import os
 from multiprocessing import cpu_count
 
 import numpy as np
+
 from .cid_abc import ComputableInformationDensity, ComputableInformationDensity_old
 from .hilbert_curve import hilbert_curve, precompute_hcurves, precompute_zcurves
 
@@ -98,7 +99,6 @@ class CID_old(ComputableInformationDensity_old):
         cid_av, cid_std, cid_shuffle = super().__call2__(data, n_workers=self.ncpus)
         cid_sem = cid_std / np.sqrt(self.length)
         return cid_av, cid_sem, cid_shuffle
-
 
 def cid2d(nshuff, nbits=None, data_shape=None, ordering='hilbert',mode='lz77', verbose=False):
     """ Two-dimensional CID Analysis \n

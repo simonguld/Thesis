@@ -1,6 +1,7 @@
+from itertools import permutations
+
 import numpy as np
 import zCurve as zC
-from itertools import permutations
 
 def hilbert_curve(n, p):
     """ Principal Hilbert Curve. \n
