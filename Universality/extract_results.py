@@ -68,7 +68,7 @@ def main():
     'Nexp_list': [3],
     'act_exclude_dict': {2048: []},
     'xlims': None,
-    'uncertainty_multiplier': 5,
+    'uncertainty_multiplier': 1,
     'act_critical': 2.1
     }
 
