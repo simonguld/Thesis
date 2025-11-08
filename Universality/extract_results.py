@@ -3,6 +3,7 @@
 
 ### SETUP ------------------------------------------------------------------------------------
 
+from asyncio import windows_events
 import os
 import argparse
 import warnings
@@ -24,31 +25,43 @@ from utils_plot import *
 def main():   
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_suffix', type=str, default='')
-    parser.add_argument('--extract', type=str2bool, default=False)
-    parser.add_argument('--analyze', type=str2bool, default=False)
-    parser.add_argument('--plot', type=str2bool, default=False)
-    parser.add_argument('--seq', type=str2bool, default=False)
-    parser.add_argument("--nbits", type=lambda s: [int(x) for x in s.split(',')], \
-                        help='Comma-separated list, e.g. --nbits 2,3,4', default='4')
-    parser.add_argument('--cg', type=int, default=4)
+    parser.add_argument('-ds', '--data_suffix', type=str, default='')
+    parser.add_argument('-e', '--extract', action='store_true', help='Set to extract data')
+    parser.add_argument('-a', '--analyze', action='store_true', help='Set to analyze data')
+    parser.add_argument('-p', '--plot', action='store_true', help='Set to produce plots')
+    parser.add_argument('-s', '--seq', action='store_true', help='Use sequential mode')
+    parser.add_argument('-nb', '--nbits', type=lambda s: [int(x) for x in s.split(',')],
+                        help='Comma-separated list, e.g. --nbits 2,3,4', default=None)
+    #parser.add_argument('-ws', '--window_size', type=lambda s: [int(x) for x in s.split(',')],
+    #                    help='Comma-separated list, e.g. --window_size 256', default=None)
+    parser.add_argument('-nf', '--nframes', type=lambda s: [int(x) for x in s.split(',')],
+                        help='Comma-separated list, e.g. --nframes 256', default=None)
+    parser.add_argument('-ws', '--window_size', type=int, default=None)
+    parser.add_argument('-cg', '--cg', type=int, default=4)
     args = parser.parse_args()
 
     extract = args.extract
     analyze = args.analyze
     plot = args.plot
 
-    nbits_list = args.nbits
+    window_size = args.window_size
     cg = args.cg
 
+    if window_size is not None:
+        size_list = args.nframes
+        seq = False
+        output_suffix_func = lambda size: f'_nx{window_size}nt{size}cg{cg}'
+    else:
+        size_list = args.nbits
+        seq = args.seq
+        output_suffix_func = lambda nbits: f'_seq_nb{nbits}cg{cg}' if seq else f'_nb{nbits}cg{cg}'
+
     data_suffix = args.data_suffix
-    if not data_suffix in ['', 'sd', 's', 'ndg']:
-        raise ValueError("data_suffix must be one of '', 'sd', 's', or 'ndg'")
+    if not data_suffix in ['', 'sd', 's', 'ndg', '_zorder']:
+        raise ValueError("data_suffix must be one of '', 'sd', 's', 'ndg', or '_zorder'")
 
     base_path = f'Z:\\cid\\na'
     save_path = f'data\\nematic\\na'
- 
-    use_seq = args.seq
     verbose = True
 
     data_dict = {}
@@ -61,7 +74,15 @@ def main():
         'uncertainty_multiplier': 20,
         'act_critical': 0.022
     }
-
+    zorder_data_dict = {
+    'data_suffix': '_zorder',
+    'L_list': [512],
+    'Nexp_list': [5],
+    'act_exclude_dict': {512: [0.02, 0.0235]},
+    'xlims': (0.016, 0.045),
+    'uncertainty_multiplier': 20,
+    'act_critical': 0.022
+    }
     s_data_dict = {
     'data_suffix': 's',
     'L_list': [2048],
@@ -71,16 +92,15 @@ def main():
     'uncertainty_multiplier': 1,
     'act_critical': 2.1
     }
-
     na_data_dict = {
         'data_suffix': '',
         'L_list': [512, 1024, 2048],
         'Nexp_list': [5]*3,
-        'act_exclude_dict': {512: [0.02, 0.0225], 1024: [], 2048: [0.0225]},
+        'act_exclude_dict': {512: [0.02, 0.0225, 0.0235], 1024: [], 2048: [0.0225]},
         'xlims': (0.016, 0.045),
         'uncertainty_multiplier': 20,
         'act_critical': 0.022
-    }
+     }
     ndg_data_dict = {
         'data_suffix': 'ndg',
         'L_list': [1024],
@@ -91,8 +111,8 @@ def main():
         'act_critical': 7
     }
 
-    data_dict = {'sd': sd_data_dict, 'ndg': ndg_data_dict, '': na_data_dict, 's': s_data_dict}
-    fig_folder_dict = {'sd': 'sd', 'ndg': 'ndg', '': 'na', 's': 's'}
+    data_dict = {'sd': sd_data_dict, 'ndg': ndg_data_dict, '': na_data_dict, 's': s_data_dict, '_zorder': zorder_data_dict}
+    fig_folder_dict = {'sd': 'sd', 'ndg': 'ndg', '': 'na', 's': 's', '_zorder': 'z'}
 
     cid_dict = {
         'base_path': base_path,
@@ -103,13 +123,13 @@ def main():
         **data_dict[data_suffix]
     }
 
-    for nbits in nbits_list:
-        print(f'\nProcessing for nbits={nbits}, cg={cg}...')
+    for size in size_list:
+        print(f'\nProcessing for size={size}, cg={cg}...')
 
         xlims = data_dict[data_suffix]['xlims']
 
-        output_suffix=f'_seq_nb{nbits}cg{cg}' if use_seq else f'_nb{nbits}cg{cg}'
-        cid_dict.update({'output_suffix': output_suffix, 'nbits': nbits})
+        output_suffix = output_suffix_func(size)
+        cid_dict.update({'output_suffix': output_suffix,})
 
         fig_folder = fig_folder_dict[data_suffix]
         figs_save_path = f'data\\nematic\\figs\\{fig_folder}\\{output_suffix[1:]}'
@@ -128,7 +148,7 @@ def main():
         if plot:
             plot_abs = False
             act_critical = cid_dict['act_critical']
-            if nbits == 7 and data_suffix == '':
+            if size == 7 and data_suffix == '':
                 L_list = [1024, 2048]
             else:
                 L_list = ac.L_list
