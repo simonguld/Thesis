@@ -301,7 +301,7 @@ def plot_cid_fluctuations(L_list, act_dict, cid_time_av_dict, cid_var_dict, dcid
         axx.hlines(0, xlim[0], xlim[1], colors='black', linestyles='solid', lw=1, alpha=0.8,zorder=-5)
         if act_critical is not None:
             axx.vlines(act_critical, ylim[0], ylim[1], color='k', linestyle='--', zorder=-5, lw=1)
-        axx.legend()
+        axx.legend(fontsize=12)
 
     fig.tight_layout()
 
@@ -413,7 +413,7 @@ def plot_div_fluctuations(L_list, act_dict, frac_time_av_dict, dfrac_dict, div_v
         axx.hlines(0, xlim[0], xlim[1], colors='black', linestyles='solid', lw=1, alpha=0.8,zorder=-5)
         if act_critical is not None:
             axx.vlines(act_critical, ylim[0], ylim[1], color='k', linestyle='--', zorder=-5, lw=1)
-        axx.legend()
+        axx.legend(fontsize=12)
     fig.tight_layout()
     if savepath:
         fig.savefig(savepath, bbox_inches='tight', dpi=620, pad_inches=0.05)
