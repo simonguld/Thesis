@@ -51,7 +51,6 @@ def get_defect_arr_from_frame(defect_dict):
         defect_positions[i] = defect['pos']
     return defect_positions
 
-
 def get_defect_density(defect_list, area, return_charges=False, save = False, save_path = None,):
         """
         Get defect density for each frame in archive

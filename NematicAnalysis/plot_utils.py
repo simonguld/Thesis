@@ -19,6 +19,11 @@ from utils import *
 
 ### FUNCTIONS ----------------------------------------------------------------------------------
 
+def produce_scaling(X, scaling_exp, Y0, x_bounds,):
+    x = X[x_bounds[0]:x_bounds[1]]
+    return x, Y0 * x**scaling_exp / x[0]**scaling_exp
+
+
 def frame_plotter(frame, plot_director = True,  ms = 4, engine = plt):
     """Plot a frame. If plot_director is False, the velocity field is plotted instead.
     
