@@ -347,6 +347,9 @@ def extract_cid_results_single(info_dict, verbose=True):
     act_dir_list = glob.glob(os.path.join(base_path, '*'))
     act_list = [float(act_dir.split('_')[-1]) for act_dir in act_dir_list]
 
+    # sort
+    act_dir_list, act_list = zip(*sorted(zip(act_dir_list, act_list), key=lambda x: x[1]))
+
     # exclude activities in act_exclude_list
     act_dir_list = [act_dir for i, act_dir in enumerate(act_dir_list) if act_list[i] not in act_exclude_list]
     act_list = [act for act in act_list if act not in act_exclude_list]

@@ -57,8 +57,8 @@ def main():
         output_suffix_func = lambda nbits: f'_seq_nb{nbits}cg{cg}' if seq else f'_nb{nbits}cg{cg}'
 
     data_suffix = args.data_suffix
-    if not data_suffix in ['', 'sd', 's', 'ndg', '_zorder']:
-        raise ValueError("data_suffix must be one of '', 'sd', 's', 'ndg', or '_zorder'")
+    if not data_suffix in ['na', 'na512', 'na1024', 'na2048', 'sd', 's', 'ndg', 'pol', 'abp']:
+        raise ValueError("data_suffix must be one of 'na', 'na512', 'na1024', 'na2048', 'sd', 's', 'ndg', 'pol', 'abp'")
 
     base_path = f'Z:\\cid\\na'
     save_path = f'data\\nematic\\na'
@@ -74,15 +74,16 @@ def main():
         'uncertainty_multiplier': 20,
         'act_critical': 0.022
     }
-    zorder_data_dict = {
-    'data_suffix': '_zorder',
-    'L_list': [512],
-    'Nexp_list': [5],
-    'act_exclude_dict': {512: [0.02, 0.0235]},
-    'xlims': (0.016, 0.045),
-    'uncertainty_multiplier': 20,
-    'act_critical': 0.022
+    abp_data_dict = {
+        'data_suffix': 'abp',
+        'L_list': [256],
+        'Nexp_list': [1],
+        'act_exclude_dict': {256: []},
+        'xlims': None,
+        'uncertainty_multiplier': 5,
+        'act_critical': None
     }
+
     s_data_dict = {
     'data_suffix': 's',
     'L_list': [2048],
@@ -101,6 +102,36 @@ def main():
         'uncertainty_multiplier': 20,
         'act_critical': 0.022
      }
+    
+    na512_data_dict = {
+        'data_suffix': '',
+        'L_list': [512,],
+        'Nexp_list': [5],
+        'act_exclude_dict': {512: [0.02, 0.0225, 0.0235],},
+        'xlims': (0.016, 0.045),
+        'uncertainty_multiplier': 20,
+        'act_critical': 0.022
+        }
+    na1024_data_dict = {
+        'data_suffix': '',
+        'L_list': [1024,],
+        'Nexp_list': [5],
+        'act_exclude_dict': {1024: [],},
+        'xlims': (0.016, 0.045),
+        'uncertainty_multiplier': 20,
+        'act_critical': 0.022
+     }
+    na2048_data_dict = {
+        'data_suffix': '',
+        'L_list': [2048,],
+        'Nexp_list': [5],
+        'act_exclude_dict': {2048: [0.0225],},
+        'xlims': (0.016, 0.045),
+        'uncertainty_multiplier': 20,
+        'act_critical': 0.022
+        }
+
+
     ndg_data_dict = {
         'data_suffix': 'ndg',
         'L_list': [1024],
@@ -110,9 +141,23 @@ def main():
         'uncertainty_multiplier': 20,
         'act_critical': 7
     }
-
-    data_dict = {'sd': sd_data_dict, 'ndg': ndg_data_dict, '': na_data_dict, 's': s_data_dict, '_zorder': zorder_data_dict}
-    fig_folder_dict = {'sd': 'sd', 'ndg': 'ndg', '': 'na', 's': 's', '_zorder': 'z'}
+    pol_data_dict = {
+        'data_suffix': 'pol',
+        'L_list': [2048],
+        'Nexp_list': [1],
+        'act_exclude_dict': {2048: [0.05, 0.1, 0.105,0.11, 0.115, 0.12, 0.125, 0.13, 0.135, 0.14,]},
+        'xlims': None,
+        'uncertainty_multiplier': 5,
+        'act_critical': None
+    }
+    data_dict = {'sd': sd_data_dict, 'ndg': ndg_data_dict, 'na': na_data_dict, 'na512':
+                  na512_data_dict, 'na1024': na1024_data_dict, 'na2048': na2048_data_dict, 's': s_data_dict, 
+                   'pol': pol_data_dict, 'abp': abp_data_dict}
+    fig_folder_dict = {'sd': 'sd', 'ndg': 'ndg', 'na': 'na',
+                    'na512': 'na512',
+                    'na1024': 'na1024', 
+                    'na2048': 'na2048', 's': 's',
+                    'pol': 'pol', 'abp': 'abp'}
 
     cid_dict = {
         'base_path': base_path,
