@@ -57,8 +57,10 @@ def main():
         output_suffix_func = lambda nbits: f'_seq_nb{nbits}cg{cg}' if seq else f'_nb{nbits}cg{cg}'
 
     data_suffix = args.data_suffix
-    if not data_suffix in ['na', 'na512', 'na1024', 'na2048', 'sd', 's', 'ndg', 'pol', 'abp']:
-        raise ValueError("data_suffix must be one of 'na', 'na512', 'na1024', 'na2048', 'sd', 's', 'ndg', 'pol', 'abp'")
+    if not data_suffix in ['na', 'na512', 'na1024', 'na2048', 'sd', 's', 'ndg', 'pol', 'abp', 'pols']:
+        raise ValueError("data_suffix must be one of 'na',\
+                          'na512', 'na1024', 'na2048',\
+                         'sd', 's', 'ndg', 'pol', 'abp', 'pols'")
 
     base_path = f'Z:\\cid\\na'
     save_path = f'data\\nematic\\na'
@@ -150,14 +152,24 @@ def main():
         'uncertainty_multiplier': 5,
         'act_critical': None
     }
+    pols_data_dict = {
+        'data_suffix': 'pols',
+        'L_list': [2048],
+        'Nexp_list': [1],
+        'act_exclude_dict': {2048: []},
+        'xlims': None,
+        'uncertainty_multiplier': 1,
+        'act_critical': None
+    }
+
     data_dict = {'sd': sd_data_dict, 'ndg': ndg_data_dict, 'na': na_data_dict, 'na512':
                   na512_data_dict, 'na1024': na1024_data_dict, 'na2048': na2048_data_dict, 's': s_data_dict, 
-                   'pol': pol_data_dict, 'abp': abp_data_dict}
+                   'pol': pol_data_dict, 'pols': pols_data_dict, 'abp': abp_data_dict}
     fig_folder_dict = {'sd': 'sd', 'ndg': 'ndg', 'na': 'na',
                     'na512': 'na512',
                     'na1024': 'na1024', 
                     'na2048': 'na2048', 's': 's',
-                    'pol': 'pol', 'abp': 'abp'}
+                    'pol': 'pol', 'pols': 'pols', 'abp': 'abp'}
 
     cid_dict = {
         'base_path': base_path,
