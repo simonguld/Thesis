@@ -271,7 +271,10 @@ def extract_cid_results(info_dict, verbose=True):
 
     act_dir_list = glob.glob(os.path.join(base_path, '*'))
     act_list = [float(act_dir.split('_')[-1]) for act_dir in act_dir_list]
-    
+
+    # sort
+    act_dir_list, act_list = zip(*sorted(zip(act_dir_list, act_list), key=lambda x: x[1]))
+
     # exclude activities in act_exclude_list
     act_dir_list = [act_dir for i, act_dir in enumerate(act_dir_list) if act_list[i] not in act_exclude_list]
     act_list = [act for act in act_list if act not in act_exclude_list]
@@ -279,6 +282,8 @@ def extract_cid_results(info_dict, verbose=True):
     # extract parameter dict for first run
     exp_dirs = [x[0] for x in os.walk(act_dir_list[0])][1:]
     
+    if verbose: print(f'Exp. dirs found for first activity: {exp_dirs}')
+
     for exp_dir in exp_dirs:
         try:
             with open(os.path.join(exp_dir, f'cid_params{output_suffix}.pkl'), 'rb') as f:
@@ -287,6 +292,7 @@ def extract_cid_results(info_dict, verbose=True):
                 pkl.dump(cid_params, f)
             break
         except:
+            if verbose: print(f'cid_params{output_suffix}.pkl not found in {exp_dir}, skipping...')
             continue
 
     ncubes = cid_params['ncubes']
