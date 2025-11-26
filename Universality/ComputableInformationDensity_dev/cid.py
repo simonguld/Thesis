@@ -52,9 +52,6 @@ class CID(ComputableInformationDensity):
         self.nbits = max((s - 1).bit_length() for s in data_shape)
         self.size = 1 << self.nbits
 
-        if any(s > self.size for s in data_shape):
-            raise ValueError("all dimensions in data_shape must be at most 2**nbits for zcurve ordering")
-
         self.length = np.math.factorial(dim)
         self.curves = precompute_zcurves(data_shape, self.nbits)
 
@@ -76,6 +73,7 @@ class CID(ComputableInformationDensity):
         cid_av, cid_std, cid_shuffle, cid_vals = super().calc_cid(data,)
         cid_sem = cid_std / np.sqrt(self.length)
         return cid_av, cid_sem, cid_shuffle, cid_vals
+
 
 class CID_old(ComputableInformationDensity_old):
     

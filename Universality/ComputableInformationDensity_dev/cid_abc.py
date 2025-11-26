@@ -57,6 +57,8 @@ class ComputableInformationDensity(ABC):
         return np.mean(cid_vals), np.std(cid_vals, ddof=1), self.cid_shuffle(data), cid_vals
 
 
+
+
 class ComputableInformationDensity_old(ABC):
 
     """ Abstract base class for the Computable Information Density """
