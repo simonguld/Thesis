@@ -281,6 +281,8 @@ def extract_cid_results(info_dict, verbose=True):
 
     # extract parameter dict for first run
     exp_dirs = [x[0] for x in os.walk(act_dir_list[0])][1:]
+
+    exp_dirs = exp_dirs[:nexp]
     
     if verbose: print(f'Exp. dirs found for first activity: {exp_dirs}')
 
@@ -308,7 +310,7 @@ def extract_cid_results(info_dict, verbose=True):
     frac_arr_minmax = np.nan * np.zeros_like(cid_arr_minmax)
 
     for i, act_dir in enumerate(act_dir_list):
-        exp_dir_list =  [x[0] for x in os.walk(act_dir)][1:]
+        exp_dir_list =  [x[0] for x in os.walk(act_dir)][1:][:nexp]
         for j, exp_dir in enumerate(exp_dir_list):
             try:
                 data_npz = np.load(os.path.join(exp_dir, f'cid{output_suffix}.npz'), allow_pickle=True)

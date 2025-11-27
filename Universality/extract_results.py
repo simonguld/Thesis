@@ -84,7 +84,7 @@ def main():
     abr_data_dict = {
         'data_suffix': 'abr',
         'L_list': [128],
-        'Nexp_list': [2],
+        'Nexp_list': [4],
         'act_exclude_dict': {128: []},
         'xlims': None,
         'uncertainty_multiplier': 5,
