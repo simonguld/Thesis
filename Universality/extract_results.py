@@ -72,10 +72,11 @@ def main():
         'uncertainty_multiplier': 20,
         'act_critical': 0.022
     }
+    
     abp_data_dict = {
         'data_suffix': 'abp',
         'L_list': [128],
-        'Nexp_list': [2],
+        'Nexp_list': [5],
         'act_exclude_dict': {128: []},
         'xlims': None,
         'uncertainty_multiplier': 5,
@@ -84,7 +85,7 @@ def main():
     abr_data_dict = {
         'data_suffix': 'abr',
         'L_list': [128],
-        'Nexp_list': [4],
+        'Nexp_list': [5],
         'act_exclude_dict': {128: []},
         'xlims': None,
         'uncertainty_multiplier': 5,
