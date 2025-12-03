@@ -59,7 +59,7 @@ def main():
     data_suffix = args.data_suffix
 
     base_path = f'Z:\\cid\\na'
-    save_path = f'data\\nematic\\na'
+    save_path = f'data\\na'
     verbose = True
 
     data_dict = {}
