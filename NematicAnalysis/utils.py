@@ -26,7 +26,9 @@ import structure_factor.pair_correlation_function as pcf
 
 import massPy as mp
 
-sys.path.append('C:\\Users\\Simon Andersen\\Projects\\Projects\\Appstat2022\\External_Functions')
+HOME_DIR = os.path.expanduser("~")
+PROJECTS_DIR = os.path.join(HOME_DIR, 'Projects', 'Projects')
+sys.path.append(os.path.join(PROJECTS_DIR, 'Appstat2022', 'External_Functions'))
 from ExternalFunctions import Chi2Regression
 
 

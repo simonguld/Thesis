@@ -11,7 +11,6 @@ from typing import Dict, List, Any
 
 import numpy as np
 import matplotlib.pyplot as plt
-from sympy import use
 
 from utils import *
 from utils_plot import *

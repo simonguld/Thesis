@@ -13,7 +13,6 @@ from multiprocessing.pool import Pool as Pool
 
 import numpy as np
 from scipy.stats import moment
-from sympy import frac
 
 # Helper functions -----------------------------------------------------------------------
 

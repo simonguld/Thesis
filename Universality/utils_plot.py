@@ -3,7 +3,6 @@
 ## Imports:
 import numpy as np
 import matplotlib.pyplot as plt
-from sympy import div
 
 # CID plotting functions -------------------------------------------------------------------
 
