@@ -19,12 +19,12 @@ sys.path.append('/groups/astro/kpr279/ComputableInformationDensity/')
 import massPy as mp
 #import ComputableInformationDensity 
 
-from ComputableInformationDensity2.cid import interlaced_time
+from ComputableInformationDensity2.cid import interlaced_time, cid2d
 from ComputableInformationDensity2.computable_information_density import cid, cid_linear, cid_shuffle
 
-development_mode = False
-if development_mode:
-    num_frames = 40
+# Define number of frames to use in debug mode
+num_frames_debug = 4
+
 
 ### FUNCTIONS ----------------------------------------------------------------------------------
 
@@ -40,7 +40,7 @@ def get_defect_arr_from_frame(defect_dict):
         defect_positions[i] = defect['pos']
     return defect_positions
 
-def get_defect_list(archive, LX, LY, idx_first_frame=0, verbose=False):
+def get_defect_list(archive, LX, LY, idx_first_frame=0, debug=False, verbose=False):
     """
     Get list of topological defects for each frame in archive
     Parameters:
@@ -55,10 +55,10 @@ def get_defect_list(archive, LX, LY, idx_first_frame=0, verbose=False):
 
     if verbose:
         t_start = time.time()
-    if not development_mode:
+    if not debug:
         Nframes = archive.__dict__['num_frames']
     else:  
-        Nframes = num_frames
+        Nframes = num_frames_debug
 
     # Loop over frames
     for i in range(idx_first_frame, Nframes):
@@ -77,7 +77,6 @@ def get_defect_list(archive, LX, LY, idx_first_frame=0, verbose=False):
         print('Time to get defect list: %.2f s' % t_end)
 
     return top_defects
-
 
 def get_allowed_time_intervals(system_size, nbits_max = 8):
     """
@@ -123,20 +122,29 @@ def str2bool(v):
 
 ### MAIN ---------------------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_folder', type=str)
     parser.add_argument('--output_folder', type=str)
     parser.add_argument('--defect_list_folder', type=str, default=None)
-    parser.add_argument('--debug', type=str2bool, default=False) 
     parser.add_argument('--nbits', type=int, default=5)
     parser.add_argument('--cg_box_length', type=int, default=1)
+    parser.add_argument('--system_size', type=int, default=None)
+    parser.add_argument('--activity', type=float, default=None)
+    parser.add_argument('--experiment', type=int, default=None)
+    parser.add_argument('--debug', type=str2bool, default=False)
+    parser.add_argument('--sequential', type=str2bool, default=False) 
     args = parser.parse_args()
 
     archive_path = args.input_folder
     output_path = args.output_folder
     defect_list_folder = args.defect_list_folder
+
     debug = args.debug
+    system_size = args.system_size
+    act = args.activity
+    exp = args.experiment
 
     defect_dir = output_path if defect_list_folder is None else defect_list_folder
     defect_position_path = os.path.join(defect_dir, f'defect_positions.pkl')
@@ -149,33 +157,35 @@ def main():
     # --------------------------------------------
     # Load data
     t1 = time.perf_counter()
-    ar = mp.archive.loadarchive(archive_path)
-    LX, LY = ar.__dict__['LX'], ar.__dict__['LY']
-
-    try:
-        exp = int(output_path.split('_')[-1])
-        act = float(output_path.split('_')[-3])
-        if exp==1: print(f"\nAnalyzing experiment {exp} and activity {act}")
-    except:
-        exp = None
-        act = os.path.basename(os.path.normpath(output_path))
-        print(f"\nAnalyzing {act}")
+    if system_size is None:
+        ar = mp.archive.loadarchive(archive_path)
+        LX, LY = ar.__dict__['LX'], ar.__dict__['LY']
+    else:
+        LX, LY = system_size, system_size
+    
+    if exp==1: print(f"\nAnalyzing experiment {exp} and activity {act}")
 
     if os.path.exists(defect_position_path):
         with open(defect_position_path, 'rb') as f:
             top_defects = pickle.load(f)
     else:
+        if system_size is not None:
+            print("Error: defect positions not found, but system size specified. Please provide defect list folder.")
+            return
+        
         # Get defect list
-        top_defects = get_defect_list(ar, LX, LY,)
+        top_defects = get_defect_list(ar, LX, LY, debug=debug)
         # save top_defects
         with open(defect_position_path, 'wb') as f:
             pickle.dump(top_defects, f)
         print(f"Time to calculate defect positions for experiment {exp} and activity {act}: ", np.round(time.perf_counter()-t1,2), "s")
+
     # --------------------------------------------
     
     # Set params
     nbits = args.nbits # side length of each hypercube will be 2^nbits
     coarse_graining_box_length = args.cg_box_length
+    sequential = args.sequential
 
     defect_dtype = int
     dtype = np.uint8
@@ -187,7 +197,7 @@ def main():
     top_defects = top_defects[::njumps_between_frames]
 
     Nframes = len(top_defects)
-    nframes_to_analyze = min(400, Nframes) if not development_mode else num_frames
+    nframes_to_analyze = min(400, Nframes) if not debug else num_frames_debug
     nshuffle = 16
 
     LX_cg = LX // coarse_graining_box_length
@@ -196,14 +206,19 @@ def main():
     lx_window = LX // compression_factor
     lx_window_cg = lx_window // coarse_graining_box_length
 
-    overlap = 0 # overlap between cubes
-    nframes_per_cube = get_allowed_time_intervals(system_size = lx_window_cg, nbits_max=nbits)[-1]['time_interval']
+    if sequential:
+        overlap = 0
+        nframes_per_cube = 1
+        save_suffix = f'_seq_nb{nbits}cg{coarse_graining_box_length}' 
+    else:
+        overlap = 0 # overlap between cubes
+        nframes_per_cube = get_allowed_time_intervals(system_size = lx_window_cg, nbits_max=nbits)[-1]['time_interval']
+        save_suffix = f'_nb{nbits}cg{coarse_graining_box_length}' 
+    
     time_subinterval = nframes_per_cube - overlap
     ncubes = 1 + int(((nframes_to_analyze - nframes_per_cube) / time_subinterval))
     first_frame_idx = (Nframes - nframes_to_analyze) + (nframes_to_analyze - nframes_per_cube - ((ncubes - 1) * time_subinterval))
-
-    save_suffix = f'_{cid_mode}_c{compression_factor}_nb{nbits}_o{overlap}_cg{coarse_graining_box_length}' # suffix for saving files
-    save_suffix = f'_nb{nbits}cg{coarse_graining_box_length}' 
+ 
     param_dict = {
         'cid_mode' : cid_mode,
         'dtype' : dtype,
@@ -223,7 +238,7 @@ def main():
         'first_frame_idx' : first_frame_idx,     
     }
 
-    if verbose and exp in [None, 1]:
+    if verbose and exp==1:
         print(f"compression_factor, npartitions: {compression_factor}, {npartitions}")
         print(f"Using window size {lx_window}x{lx_window}.")
         print(f"nf_cube,lx_cg,ly_cg= {nframes_per_cube}x{lx_window_cg}x{lx_window_cg}")
@@ -241,7 +256,10 @@ def main():
     defect_count = np.zeros_like(defect_count_full)
 
     for i, defect in enumerate(top_defects[first_frame_idx:]):
-        def_arr = get_defect_arr_from_frame(defect) #.astype(int)
+        if isinstance(defect, np.ndarray):
+            def_arr = defect
+        else:
+            def_arr = get_defect_arr_from_frame(defect) #.astype(int)
         if def_arr is None:
             continue
 
@@ -259,10 +277,15 @@ def main():
     if verbose: 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            print(f"Av. num. defects before/after coarse graining: {np.mean(defect_count_full):.2f}, {np.mean(defect_count):.2f}")
+            print(f"Average number of defects per frame before/after coarse graining: {np.mean(defect_count_full):.2f}, {np.mean(defect_count):.2f}")
+
 
     t3 = time.perf_counter()
-    CID = interlaced_time(nbits=nbits, nshuff=nshuffle,mode=cid_mode, verbose=False)
+
+    if sequential:
+        CID = cid2d(nbits=nbits, nshuff=nshuffle,mode=cid_mode, verbose=False)
+    else:
+        CID = interlaced_time(nbits=nbits, nshuff=nshuffle,mode=cid_mode, verbose=False)
 
     cid_arr_full = np.nan * np.ones((ncubes, npartitions, 8))
     cid_arr = np.nan * np.ones((ncubes, npartitions, 2))
@@ -270,7 +293,7 @@ def main():
     cid_frac_arr = np.nan * np.ones_like(cid_arr)
 
     # Compute CID for null cube
-    null_cube = np.zeros((lx_window_cg, lx_window_cg, lx_window_cg), dtype=dtype)
+    null_cube = np.zeros((nframes_per_cube, lx_window_cg, lx_window_cg), dtype=dtype)
     cid_min = cid(null_cube.flatten())
 
     for j in range(ncubes):
@@ -296,17 +319,15 @@ def main():
     cid_frac_arr[:, :, 0] = cid_arr[:, :, 0] / cid_shuffle_arr[:, :, 0]
     cid_frac_arr[:, :, 1] = cid_frac_arr[:, :, 0] * np.sqrt( (cid_arr[:, :, 1]/cid_arr[:, :, 0])**2 + (cid_shuffle_arr[:, :, 1]/cid_shuffle_arr[:, :, 0])**2 )
 
+
     if verbose: 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            msg = f"For {act}:" if exp is None else f"For act,exp {act,exp}:"
-            print(f"{msg} av CID, CID_shuff, frac: {np.nanmean(cid_arr[:,:,0]):.5f}, {np.nanmean(cid_shuffle_arr[:,:,0]):.5f}, {np.nanmean(cid_arr[:,:,0] /cid_shuffle_arr[:,:,0]):.3f} Time: ", np.round(time.perf_counter()-t3,2), "s")
+            print(f"For act,exp {act,exp}: av CID, CID_shuff, frac: {np.nanmean(cid_arr[:,:,0]):.5f}, {np.nanmean(cid_shuffle_arr[:,:,0]):.5f}, {np.nanmean(cid_arr[:,:,0] /cid_shuffle_arr[:,:,0]):.3f} Time: ", np.round(time.perf_counter()-t3,2), "s")
 
     if not debug:
-        np.savez_compressed(os.path.join(output_path, f'cid{save_suffix}.npz'), 
-                            cid=cid_arr, cid_shuffle=cid_shuffle_arr, cid_frac=cid_frac_arr,
-                            cid_full=cid_arr_full,
-                            defect_count_full=defect_count_full, defect_count=defect_count,)
+        np.savez_compressed(os.path.join(output_path, f'cid{save_suffix}.npz'), cid=cid_arr, cid_shuffle=cid_shuffle_arr, cid_frac=cid_frac_arr,
+                            cid_full=cid_arr_full, defect_count_full=defect_count_full, defect_count=defect_count,)
         # Restore stdout and print everything at once
         sys.stdout = sys.__stdout__
         print(buffer.getvalue())
