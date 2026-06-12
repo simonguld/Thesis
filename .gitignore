@@ -9,9 +9,12 @@ NematicAnalysis/makito/result*
 NematicAnalysis/figs
 NematicAnalysis/scrap
 Ising2D/output
+Resources\sweetsourcod-master
 
 # file extensions
 *.npy
+*.tex
+*.pdf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
