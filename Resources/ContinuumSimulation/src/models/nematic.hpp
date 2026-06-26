@@ -45,7 +45,15 @@ protected:
 
   bool outputEnergyCalc = true;
 
-  std::string init_config;  
+  /** Use custom init configuration?
+   *  0 = default (analytic) configuration
+   *  1 = read Q, v and rho from file (ff built from equilibrium)
+   *  2 = read Q and the full LB distribution ff from file */
+  unsigned use_init_conds = 0;
+  std::string init_conds_path = "./inits/";
+  /** Intial configuration */
+  std::string init_config;
+  
   unsigned npc = 1;
   
   double ftot = 0;
@@ -89,6 +97,9 @@ public:
    * classes, see for example NematicFreeBoundary.
    * */
   virtual void ConfigureAtNode(unsigned);
+  virtual void ConfigureAtNode1(unsigned, std::vector<float>, std::vector<float>, std::vector<float>, std::vector<float>, std::vector<float>);
+  virtual void ConfigureAtNode2(unsigned, std::vector<float>, std::vector<float>, std::vector<std::vector<float>>);
+  virtual std::vector<float> ParseInitConds(std::string);
 
   // functions from base class Model
   virtual void Initialize();

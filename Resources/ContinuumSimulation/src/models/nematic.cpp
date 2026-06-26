@@ -79,11 +79,102 @@ void Nematic::ConfigureAtNode(unsigned k)
   FFx[k] = 0.0;
   FFy[k] = 0.0;
 }
+
+void Nematic::ConfigureAtNode1(unsigned k, vector<float> Qxxinits, vector<float> Qyxinits, vector<float> Uxinits, vector<float> Uyinits, vector<float> rhoinits)
+{
+  // read Q and v in from file. A proper way would read the whole ff
+  QQxx[k] = Qxxinits[k];
+  QQyx[k] = Qyxinits[k];
+  // equilibrium dist
+  ux[k] = Uyinits[k];
+  uy[k] = Uxinits[k];
+  //ux[k] = uy[k] = 0;
+  //n[k]  = rho;
+  n[k]  = rhoinits[k];
+
+  // obviously this is not perfect
+  ff[k] = GetEquilibriumDistribution(ux[k], uy[k], n[k]);
+  // compute totals for later checks
+  ftot  = accumulate(begin(ff[k]), end(ff[k]), ftot);
+}
+
+void Nematic::ConfigureAtNode2(unsigned k, vector<float> Qxxinits, vector<float> Qyxinits, vector<vector<float>> ffinits)
+{
+  // read Q and the full LB distribution in from file. Unlike ConfigureAtNode1
+  // this does not assume the fluid is at equilibrium: ff is set directly so an
+  // exact restart state can be recovered.
+  QQxx[k] = Qxxinits[k];
+  QQyx[k] = Qyxinits[k];
+
+  // ffinits[v][k] is the v-th LB direction at node k
+  for(unsigned v=0; v<lbq; ++v)
+    ff[k][v] = ffinits[v][k];
+
+  // recover the hydrodynamic moments from the distribution for consistency
+  // (same convention as UpdateFluidQuantitiesAtNode, minus the force term which
+  // is not yet known at configuration time)
+  const double nn = ff[k][0] + ff[k][1] + ff[k][2] + ff[k][3] + ff[k][4]
+                  + ff[k][5] + ff[k][6] + ff[k][7] + ff[k][8];
+  n[k]  = nn;
+  ux[k] = (ff[k][1] - ff[k][2] + ff[k][5] - ff[k][6] - ff[k][7] + ff[k][8])/nn;
+  uy[k] = (ff[k][3] - ff[k][4] + ff[k][5] - ff[k][6] + ff[k][7] - ff[k][8])/nn;
+
+  // compute totals for later checks
+  ftot  = accumulate(begin(ff[k]), end(ff[k]), ftot);
+}
+
 void Nematic::Configure()
 {
-  for(unsigned k=0; k<DomainSize; ++k)
-    ConfigureAtNode(k);
+  if (use_init_conds == 1)
+  { // read Q, v and rho from file; ff is built from the equilibrium distribution
+    // files needed: Qxx.txt, Qyx.txt, vx.txt, vy.txt, rho.txt as csvs
+    cout << "\nusing init conds (1): Q, v, rho" << endl;
 
+    string fileQxx = init_conds_path+"Qxx.txt"; 
+    string fileQyx = init_conds_path+"Qyx.txt";
+    string fileUx = init_conds_path+"vx.txt"; 
+    string fileUy = init_conds_path+"vy.txt";
+    string filerho = init_conds_path+"rho.txt";
+    vector<float> Qxxinit = ParseInitConds(fileQxx);
+    vector<float> Qyxinit = ParseInitConds(fileQyx);
+    vector<float> Uxinit = ParseInitConds(fileUx);
+    vector<float> Uyinit = ParseInitConds(fileUy);
+    vector<float> rhoinit = ParseInitConds(filerho);
+
+    #pragma omp parallel for num_threads(nthreads) if(nthreads)
+    for(unsigned k=0; k<DomainSize; ++k)
+    {
+      ConfigureAtNode1(k, Qxxinit, Qyxinit, Uxinit, Uyinit, rhoinit);
+    }
+    cout << "finished configuring" << endl;
+  }else if (use_init_conds == 2)
+  { // read Q and the full LB distribution ff from file (exact restart)
+    // files needed: Qxx.txt, Qyx.txt, ff{0..8}.txt as csvs
+    cout << "\nusing init conds (2): Q, ff" << endl;
+
+    string fileQxx = init_conds_path+"Qxx.txt"; 
+    string fileQyx = init_conds_path+"Qyx.txt";
+    vector<float> Qxxinit = ParseInitConds(fileQxx);
+    vector<float> Qyxinit = ParseInitConds(fileQyx);
+
+    // one file per LB direction: ff0.txt ... ff8.txt
+    vector<vector<float>> ffinit(lbq);
+    for(unsigned v=0; v<lbq; ++v)
+      ffinit[v] = ParseInitConds(init_conds_path+"ff"+to_string(v)+".txt");
+
+    #pragma omp parallel for num_threads(nthreads) if(nthreads)
+    for(unsigned k=0; k<DomainSize; ++k)
+    {
+      ConfigureAtNode2(k, Qxxinit, Qyxinit, ffinit);
+    }
+    cout << "finished configuring" << endl;
+  }else{
+    cout << "\nNOT using init conds" << endl;
+    #pragma omp parallel for num_threads(nthreads) if(nthreads)
+    for(unsigned k=0; k<DomainSize; ++k)
+      ConfigureAtNode(k);
+  }
+  
   //and do preinitialization
   cout << "Preinitialization started. ... ";
   preinit_flag = true;
@@ -96,6 +187,35 @@ void Nematic::Configure()
   //InsertPlusDefect(100, 100, 100, 0);
   //InsertMinusDefect(300, 200, 50, 0);
 }
+
+vector<float> Nematic::ParseInitConds(string filename)
+{ // take filename of init conds and return vector of those
+   ifstream infile;
+   infile.open(filename);
+   if(!infile.is_open())
+     throw error_msg("init conds file '", filename, "' could not be opened "
+                     "(missing file or wrong init_conds_path?).");
+   string line;
+   vector<float> parsedCsv;
+   while(std::getline(infile,line))
+    {
+      stringstream lineStream(line);
+      string cell;
+      //size_t offset = 0;
+      while(std::getline(lineStream,cell,','))
+      {
+        float celldbl = stof(cell,0);
+        parsedCsv.push_back(celldbl);
+      }
+    }
+   // guard against short/empty files: configuring indexes [0, DomainSize) so a
+   // smaller vector would read out of bounds (the segfault warned about above).
+   if(parsedCsv.size() < DomainSize)
+     throw error_msg("init conds file '", filename, "' has ", parsedCsv.size(),
+                     " values but at least ", DomainSize, " are required.");
+   return parsedCsv;
+}
+
 
 void Nematic::UpdateNematicQuantitiesAtNode(unsigned k)
 {
@@ -589,7 +709,11 @@ option_list Nematic::GetOptions()
     ("angle", opt::value<double>(&angle_deg),
      "initial angle to x direction (in degrees)")
     ("noise", opt::value<double>(&noise),
-     "size of initial variations");
+     "size of initial variations")
+    ("use_init_conds", opt::value<unsigned>(&use_init_conds),
+      "custom initial conditions: 0=off, 1=Q,v,rho, 2=Q,ff")
+    ("init_conds_path", opt::value<std::string>(&init_conds_path),
+     "path (also can include start of filename) of init conditions");
 
   return { model_options, config_options };
 }
